@@ -149,16 +149,50 @@ async function fetchAction(sym) {
     return null;
   }
 }
-
-async function getCoinGeckoIdFromSymbol(symbol) {
+async function fetchCrypto(sym) {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/list");
+    const res = await fetch(url);
     const data = await res.json();
-    const match = data.find(c => c.symbol.toLowerCase() === symbol.toLowerCase());
-    return match ? match.id : null;
+    if (data[sym] && data[sym].cad !== undefined) {
+      return {
+        price: data[sym].cad,
+        change: data[sym].cad_24h_change || 0
+      };
+    } else {
+      console.warn(`CoinGecko indisponible pour ${sym}, tentative avec Coinpaprika...`);
+      return await fetchFromCoinpaprika(sym);
+    }
+  } catch (err) {
+    console.error("Erreur CoinGecko pour", sym, err);
+    return await fetchFromCoinpaprika(sym);
+  }
+}
+    async function fetchFromCoinpaprika(sym) {
+  const map = {
+    'bitcoin': 'btc-bitcoin',
+    'ethereum': 'eth-ethereum',
+    'solana': 'sol-solana',
+    'cardano': 'ada-cardano',
+    'chainlink': 'link-chainlink',
+    'polkadot': 'dot-polkadot',
+    'avalanche-2': 'avax-avalanche',
+    'pepe': 'pepe-pepe'
+  };
+  const id = map[sym];
+  if (!id) return null;
+  try {
+    const res = await fetch(`https://api.coinpaprika.com/v1/tickers/${id}`);
+    const data = await res.json();
+    return {
+      price: data.quotes.CAD.price,
+      change: data.quotes.CAD.percent_change_24h
+    };
   } catch {
+    console.warn("Données indisponibles sur Coinpaprika pour", sym);
     return null;
   }
+    }
 }
 
 async function addAsset() {
