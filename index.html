@@ -181,3 +181,186 @@ refreshAll(); setInterval(refreshAll, 300000); </script>
 
 </body>
 </html>
+<!DOCTYPE html><html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Portefeuille</title>
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f5f7fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
+    }
+    .container {
+      width: 100%;
+      max-width: 960px;
+      background: #fff;
+      padding: 30px;
+      margin: 30px 20px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+      border-radius: 10px;
+    }
+    h1, h2, h3 {
+      text-align: center;
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-bottom: 20px;
+      justify-content: center;
+    }
+    .controls input,
+    .controls select,
+    .controls button {
+      padding: 10px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+    .controls button {
+      background: #007bff;
+      color: white;
+      cursor: pointer;
+      border: none;
+    }
+    .controls button:hover {
+      background: #0056b3;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    th, td {
+      border: 1px solid #e0e0e0;
+      padding: 10px;
+      text-align: center;
+    }
+    th {
+      background-color: #f1f1f1;
+      font-weight: 600;
+    }
+    tr:nth-child(even) {
+      background-color: #fafafa;
+    }
+    .gain {
+      color: green;
+      font-weight: bold;
+    }
+    .perte {
+      color: red;
+      font-weight: bold;
+    }
+    #resumeGlobal, #lastUpdate {
+      text-align: center;
+      margin-bottom: 10px;
+      color: #444;
+    }
+    #opportunitesDetaillees {
+      margin-top: 20px;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+    #opportunitesDetaillees p {
+      background: #f8f9fa;
+      padding: 10px;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      border-left: 4px solid #007bff;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Dashboard Portefeuille</h1>
+    <div class="controls">
+      <button id="refreshNow">Actualiser maintenant</button>
+      <select id="typeAsset">
+        <option value="crypto_cad">Crypto (CAD)</option>
+        <option value="action_usd">Action (USD)</option>
+      </select>
+      <input id="symbol" placeholder="Symbole">
+      <input id="quantity" type="number" placeholder="Quantité">
+      <input id="invested" type="number" placeholder="Montant investi">
+      <button id="addAsset">Ajouter</button>
+      <button id="removeAsset">Supprimer</button>
+    </div>
+    <div id="resumeGlobal"></div>
+    <div id="lastUpdate"></div>
+    <table id="tableAssets">
+      <thead>
+        <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Gain</th><th>%</th><th>Reco</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <h3>Recommandations intelligentes</h3>
+    <div id="opportunitesDetaillees"></div>
+  </div>
+  <script>
+    const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
+const CG_IDS = { sol:'solana', ada:'cardano', link:'chainlink' };
+let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');window.OneSignalDeferred = window.OneSignalDeferred || []; OneSignalDeferred.push(async OneSignal => { await OneSignal.init({ appId: 'c5bd46ca-82c9-4493-b9a7-3813d3eccd03' }); });
+
+function sendPushNotification(title, message) { OneSignalDeferred.push(async OneSignal => { await OneSignal.Notifications.sendWebNotification({ title: title, message: message, url: window.location.href }); }); }
+
+async function fetchCrypto(sym, vs) { const id = CG_IDS[sym] || sym; const url = https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=${vs}&include_24hr_change=true; try { const data = await fetch(url).then(r => r.json()); return data[id] || {}; } catch { return {}; } }
+
+async function fetchAction(sym) { const url = https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${ALPHA_KEY}; try { const data = await fetch(url).then(r => r.json()); const g = data['Global Quote'] || {}; return { price: parseFloat(g['05. price']) || 0, change: parseFloat(g['10. change percent']) || 0 }; } catch { return { price: 0, change: 0 }; } }
+
+async function fetchOpportunities() { const top = []; try { const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=100&page=1&sparkline=false&price_change_percentage=1h,24h'; const data = await fetch(url).then(r => r.json()); for (const c of data) { const change24h = c.price_change_percentage_24h; const change1h = c.price_change_percentage_1h_in_currency || 0; const expected = Math.round(change24h * 1.15); let reco = ''; if (change24h >= 20) { reco = OPPORTUNITÉ PRIORITAIRE – +${expected}% estimé très prochainement; } else if (change24h >= 10) { reco = Acheter bientôt – hausse attendue de +${expected}% dans les prochaines heures; } else if (change1h > 1.5) { reco = Surveiller – mouvement détecté +${expected}% possible aujourd’hui; } if (reco) top.push({ sym: c.symbol.toUpperCase(), change: change24h, reco }); } } catch (e) { console.error('Erreur CoinGecko:', e); }
+
+const symbols = ['AAPL', 'MSFT', 'TSLA', 'NVDA', 'AMZN']; for (const symbol of symbols) { try { const r = await fetch(https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_KEY}); const j = await r.json(); const d = j['Global Quote']; const p = parseFloat(d['05. price']); const pc = parseFloat(d['08. previous close']); const chg = ((p - pc) / pc * 100); const expected = Math.round(chg * 1.2); let reco = ''; if (chg >= 20) { reco = OPPORTUNITÉ ACTION – +${expected}% attendu très bientôt; } else if (chg >= 10) { reco = Action intéressante – progression prévue de +${expected}%; } if (reco) top.push({ sym: symbol, change: chg, reco }); } catch (e) { console.error('Erreur AlphaVantage:', e); } } return top; }
+
+async function refreshAll() { const table = document.querySelector('#tableAssets tbody'); table.innerHTML = ''; const sentAlerts = JSON.parse(sessionStorage.getItem('sentAlerts') || '[]'); let inv = 0, val = 0;
+
+for (const a of portfolio) { let price = 0, change = 0; if (a.type === 'crypto') { const o = await fetchCrypto(a.sym, a.curr); price = o[a.curr] || 0; change = o[${a.curr}_24h_change] || 0; } else { const o = await fetchAction(a.sym); price = o.price; change = o.change; }
+
+const value = price * a.qty;
+const gain = value - a.inv;
+const pct = a.inv ? (gain / a.inv * 100).toFixed(2) : '0.00';
+
+let reco = 'Garder';
+if (change > 15) {
+  reco = 'Renforcer';
+  const key = `reinforce_${a.sym}`;
+  if (!sentAlerts.includes(key)) {
+    sendPushNotification('Renforcer', `${a.sym.toUpperCase()} est en forte hausse (>15%)`);
+    sentAlerts.push(key);
+  }
+} else if (change < -10) {
+  reco = 'Vendre';
+  const key = `sell_${a.sym}`;
+  if (!sentAlerts.includes(key)) {
+    sendPushNotification('Vendre', `${a.sym.toUpperCase()} chute fortement (< -10%)`);
+    sentAlerts.push(key);
+  }
+}
+
+table.insertAdjacentHTML('beforeend', `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td>${price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${gain >= 0 ? 'gain' : 'perte'}">${gain.toFixed(2)}</td><td>${pct}%</td><td>${reco}</td></tr>`);
+inv += a.inv;
+val += value;
+
+}
+
+document.getElementById('resumeGlobal').innerHTML = Investi: ${inv.toFixed(2)} | Valeur: ${val.toFixed(2)}; document.getElementById('lastUpdate').textContent = Mis à jour: ${new Date().toLocaleTimeString()}; sessionStorage.setItem('sentAlerts', JSON.stringify(sentAlerts));
+
+const tops = await fetchOpportunities(); const detail = document.getElementById('opportunitesDetaillees'); detail.innerHTML = tops.map(o => <p><strong>${o.sym}</strong> – ${o.reco}</p>).join(''); }
+
+function modifyAsset(add) { const [type, curr] = document.getElementById('typeAsset').value.split('_'); const sym = document.getElementById('symbol').value.trim(); const qty = parseFloat(document.getElementById('quantity').value); const inv = parseFloat(document.getElementById('invested').value); if (!sym || !qty || !inv) return alert('Champs requis.'); const idx = portfolio.findIndex(a => a.sym === sym && a.type === type && a.curr === curr); if (add) { const entry = { type, sym, qty, inv, curr }; idx > -1 ? portfolio[idx] = entry : portfolio.push(entry); } else { if (idx > -1) portfolio.splice(idx, 1); } localStorage.setItem('portfolio', JSON.stringify(portfolio)); refreshAll(); }
+
+document.getElementById('refreshNow').onclick = refreshAll; document.getElementById('addAsset').onclick = () => modifyAsset(true); document.getElementById('removeAsset').onclick = () => modifyAsset(false);
+
+refreshAll(); setInterval(refreshAll, 300000); </script>
+
+</body>
+</html>
