@@ -151,7 +151,7 @@
           const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_KEY}`);
           const data = await res.json();
           const change = ((data.c - data.pc) / data.pc) * 100;
-          if (change >= 20) results.push({ sym: symbol, change });
+          if (change >= 5) results.push({ sym: symbol, change });
         } catch {}
       }
 
@@ -163,7 +163,7 @@
       try {
         const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=100&page=1&price_change_percentage=24h';
         const data = await fetch(url).then(r=>r.json());
-        data.filter(c=>c.price_change_percentage_24h>=20).slice(0,5).forEach(c => top.push({ sym: c.symbol.toUpperCase(), change: c.price_change_percentage_24h }));
+        data.filter(c=>c.price_change_percentage_24h>=5).slice(0,5).forEach(c => top.push({ sym: c.symbol.toUpperCase(), change: c.price_change_percentage_24h }));
       } catch {}
 
       const stocks = await fetchTopStockOpportunities();
