@@ -47,16 +47,15 @@
       margin-bottom: 10px;
     }
     html {
-  zoom: 0.75;
-}
-table {
-  font-size: 0.75rem;
-  zoom: 0.75;
-}
-
-th, td {
-  padding: 4px;
-}
+      zoom: 0.75;
+    }
+    table {
+      font-size: 0.75rem;
+      zoom: 0.75;
+    }
+    th, td {
+      padding: 4px;
+    }
   </style>
 </head>
 <body>
@@ -102,8 +101,10 @@ th, td {
 
   <h2>Conseils personnalisés</h2>
   <ul id="adviceList"></ul>
+
   <script>
-const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+    const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+
 let portfolio = localStorage.getItem('portfolio')
   ? JSON.parse(localStorage.getItem('portfolio'))
   : [
@@ -120,7 +121,8 @@ let portfolio = localStorage.getItem('portfolio')
       { type: 'crypto', sym: 'avalanche-2', qty: 1.7365, inv: 50, curr: 'cad' },
       { type: 'crypto', sym: 'pepe', qty: 2.89275, inv: 30, curr: 'cad' }
     ];
-    async function fetchCrypto(sym) {
+
+async function fetchCrypto(sym) {
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
   try {
     const res = await fetch(url);
@@ -165,6 +167,7 @@ async function fetchFromCoinpaprika(sym) {
     return null;
   }
 }
+
 async function fetchAction(sym) {
   const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
   try {
@@ -179,19 +182,13 @@ async function fetchAction(sym) {
   } catch {
     return null;
   }
-  const id = map[sym];
-  if (!id) return null;
-  try {
-    const res = await fetch(`https://api.coinpaprika.com/v1/tickers/${id}`);
-    const data = await res.json();
-    return {
-      price: data.quotes.CAD.price,
-      change: data.quotes.CAD.percent_change_24h
-    };
-  } catch {
-    console.warn("Données indisponibles sur Coinpaprika pour", sym);
-    return null;
-  }
+}
+
+function removeAsset() {
+  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
+  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  refreshAll();
 }
 
 async function addAsset() {
@@ -203,28 +200,13 @@ async function addAsset() {
 
   if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
 
-  let sym = symInput;
-  if (type === 'crypto') {
-    const id = await getCoinGeckoIdFromSymbol(symInput);
-    if (!id) return alert("Crypto non reconnue.");
-    sym = id;
-  } else {
-    sym = symInput.toUpperCase();
-  }
+  let sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
 
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   refreshAll();
 }
-
-function removeAsset() {
-  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
-  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
-  localStorage.setItem('portfolio', JSON.stringify(portfolio));
-  refreshAll();
-}
-
-async function refreshAll() {
+    async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
   const advice = document.getElementById("adviceList");
@@ -287,5 +269,5 @@ async function fetchOpportunities() {
 
 window.onload = refreshAll;
   </script>
-  </body>
+</body>
 </html>
