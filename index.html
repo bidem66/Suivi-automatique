@@ -122,21 +122,14 @@ async function fetchActionPrice(symbol) {
 }
 
 async function addAsset() {
-  const type = document.getElementById('type').value;
-  const sym = document.getElementById('symbol').value.trim().toLowerCase();
-  const qty = parseFloat(document.getElementById('quantity').value);
-  const inv = parseFloat(document.getElementById('invested').value);
-  if (!sym || !qty || !inv) return alert('Tous les champs sont requis.');
 
-  let data;
-  if (type === 'crypto') data = await fetchCryptoPrice(sym);
-  else data = await fetchActionPrice(sym.toUpperCase());
+const type = document.getElementById('type').value; const sym = document.getElementById('symbol').value.trim().toLowerCase(); const qty = parseFloat(document.getElementById('quantity').value); const inv = parseFloat(document.getElementById('invested').value); if (!sym || !qty || !inv) return alert('Tous les champs sont requis.');
 
-  if (!data || !data.price) return alert('Erreur récupération prix.');
+let data, curr; if (type === 'crypto') { data = await fetchCryptoPrice(sym); curr = 'cad'; } else { data = await fetchActionPrice(sym.toUpperCase()); curr = 'usd'; }
 
-  portfolio.push({ type, sym, qty, inv, price: data.price, change: data.change });
-  display();
-}
+if (!data || !data.price) return alert('Erreur récupération prix.');
+
+portfolio.push({ type, sym, qty, inv, price: data.price, change: data.change, curr }); refreshAll(); window.onload = refreshAll; }); display(); }
 
 async function display() {
 
