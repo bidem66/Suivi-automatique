@@ -92,6 +92,10 @@
   <ul id="adviceList"></ul>
   <script>
   const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
+    // Pause entre appels API (utile pour Alpha Vantage)
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 // Forcer tous les actifs dans le portefeuille
 let portfolio = [
   // Actions
@@ -167,7 +171,8 @@ async function fetchAction(sym) {
 
     let inv = 0, val = 0;
 
-    for (let a of portfolio) {
+  for (let a of portfolio) {
+  if (a.type === 'action') await sleep(15000); // Attente de 15s pour éviter blocage Alpha Vantage
       const info = a.type === 'crypto'
         ? await fetchCrypto(a.sym)
         : await fetchAction(a.sym.toUpperCase());
