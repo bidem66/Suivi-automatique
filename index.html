@@ -179,37 +179,6 @@ async function fetchAction(sym) {
   } catch {
     return null;
   }
-}
-async function fetchCrypto(sym) {
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data[sym] && data[sym].cad !== undefined) {
-      return {
-        price: data[sym].cad,
-        change: data[sym].cad_24h_change || 0
-      };
-    } else {
-      console.warn(`CoinGecko indisponible pour ${sym}, tentative avec Coinpaprika...`);
-      return await fetchFromCoinpaprika(sym);
-    }
-  } catch (err) {
-    console.error("Erreur CoinGecko pour", sym, err);
-    return await fetchFromCoinpaprika(sym);
-  }
-}
-    async function fetchFromCoinpaprika(sym) {
-  const map = {
-    'bitcoin': 'btc-bitcoin',
-    'ethereum': 'eth-ethereum',
-    'solana': 'sol-solana',
-    'cardano': 'ada-cardano',
-    'chainlink': 'link-chainlink',
-    'polkadot': 'dot-polkadot',
-    'avalanche-2': 'avax-avalanche',
-    'pepe': 'pepe-pepe'
-  };
   const id = map[sym];
   if (!id) return null;
   try {
