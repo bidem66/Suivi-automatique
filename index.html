@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="fr">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -13,23 +14,21 @@
       flex-direction: column;
       align-items: center;
     }
-    h1, h2 {
-      text-align: center;
-    }
+    h1, h2 { text-align: center; }
     .controls, table {
       max-width: 1000px;
       width: 100%;
       margin: 20px 0;
     }
-    .controls input, .controls select, .controls button {
-      padding: 10px;
-      margin: 5px;
-      width: 100%;
-    }
     .controls {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
       gap: 10px;
+    }
+    .controls input, .controls select, .controls button {
+      padding: 10px;
+      margin: 5px;
+      width: 100%;
     }
     table {
       border-collapse: collapse;
@@ -42,15 +41,9 @@
       padding: 4px;
       text-align: center;
     }
-    th {
-      background: #eee;
-    }
-    .gain {
-      color: green;
-    }
-    .perte {
-      color: red;
-    }
+    th { background: #eee; }
+    .gain { color: green; }
+    .perte { color: red; }
     #globalPerf {
       font-weight: bold;
       margin-bottom: 10px;
@@ -75,100 +68,162 @@
     <input id="removeSymbol" placeholder="Symbole à supprimer" />
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>  <div id="globalPerf"></div>  <h2>Actions</h2>
+  </div>
+
+  <div id="globalPerf"></div>
+
+  <h2>Actions</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableAction"></tbody>
-  </table>  <h2>Cryptos</h2>
+  </table>
+
+  <h2>Cryptos</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
-  </table>  <h2>Opportunités du moment</h2>
-  <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul>  <script src="main.js"></script></body>
-</html>
-// Deuxième partie : gestion de l'ajout, suppression, affichage, et opportunités
+  </table>
 
-function removeAsset() { const sym = document.getElementById('removeSymbol').value.trim().toLowerCase(); portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym); localStorage.setItem('portfolio', JSON.stringify(portfolio)); refreshAll(); }
+  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>
 
-async function addAsset() { const type = document.getElementById('type').value; const symInput = document.getElementById('symbol').value.trim(); const qty = parseFloat(document.getElementById('quantity').value); const inv = parseFloat(document.getElementById('invested').value); const curr = document.getElementById('devise').value;
+  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul>
 
-if (!symInput || !qty || !inv) { alert('Tous les champs sont requis.'); return; }
+<script>
+const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 
-const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase(); portfolio.push({ type, sym, qty, inv, curr }); localStorage.setItem('portfolio', JSON.stringify(portfolio)); await refreshAll(); }
+let portfolio = localStorage.getItem('portfolio')
+  ? JSON.parse(localStorage.getItem('portfolio'))
+  : [
+    { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
+    { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, curr: 'usd' },
+    { type: 'action', sym: 'STLA', qty: 3, inv: 60, curr: 'usd' },
+    { type: 'action', sym: 'CRM', qty: 0.2271, inv: 57.97, curr: 'usd' },
+    { type: 'crypto', sym: 'bitcoin', qty: 0.005, inv: 300, curr: 'cad' },
+    { type: 'crypto', sym: 'solana', qty: 1.2, inv: 160, curr: 'cad' },
+    { type: 'crypto', sym: 'cardano', qty: 100, inv: 60, curr: 'cad' },
+    { type: 'crypto', sym: 'chainlink', qty: 4.1, inv: 85, curr: 'cad' },
+    { type: 'crypto', sym: 'polkadot', qty: 7.7, inv: 75, curr: 'cad' },
+    { type: 'crypto', sym: 'pepe', qty: 1000000, inv: 30, curr: 'cad' }
+  ];
 
-async function refreshAll() { const tbodyA = document.getElementById("tableAction"); const tbodyC = document.getElementById("tableCrypto"); const advice = document.getElementById("adviceList"); const perf = document.getElementById("globalPerf");
-
-tbodyA.innerHTML = ""; tbodyC.innerHTML = ""; advice.innerHTML = "";
-
-let inv = 0, val = 0;
-
-for (let a of portfolio) { const info = a.type === 'crypto' ? await fetchCrypto(a.sym) : await fetchAction(a.sym);
-
-if (!info) {
-  const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
-  (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
-  continue;
+async function fetchAction(sym) {
+  try {
+    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
+    const data = await res.json();
+    if (!data.c) return null;
+    return {
+      price: data.c,
+      change: ((data.c - data.pc) / data.pc) * 100,
+      currency: 'USD'
+    };
+  } catch {
+    return null;
+  }
 }
 
-const cur = info.currency || a.curr.toUpperCase();
-const value = info.price * a.qty;
-const gain = value - a.inv;
-const change = info.change.toFixed(2);
-const gainClass = gain >= 0 ? 'gain' : 'perte';
-
-inv += a.inv;
-val += value;
-
-const row = `<tr>
-  <td>${a.sym.toUpperCase()}</td>
-  <td>${a.qty}</td>
-  <td>${a.inv.toFixed(2)}</td>
-  <td>${info.price.toFixed(2)}</td>
-  <td>${value.toFixed(2)}</td>
-  <td class="${gainClass}">${change}%</td>
-  <td>${cur.toUpperCase()}</td>
-</tr>`;
-
-(a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
-
-advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
-
+async function fetchCrypto(sym) {
+  try {
+    const res = await fetch(`https://api.coincap.io/v2/assets/${sym}`);
+    const data = await res.json();
+    if (!data?.data?.priceUsd) return null;
+    return {
+      price: parseFloat(data.data.priceUsd),
+      change: parseFloat(data.data.changePercent24Hr),
+      currency: 'USD'
+    };
+  } catch {
+    return null;
+  }
 }
 
-const totalGain = val - inv; const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0; perf.textContent = Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%); perf.style.color = totalGain >= 0 ? 'green' : 'red';
+function removeAsset() {
+  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
+  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  refreshAll();
+}
 
-fetchOpportunities(); }
+async function addAsset() {
+  const type = document.getElementById('type').value;
+  const symInput = document.getElementById('symbol').value.trim();
+  const qty = parseFloat(document.getElementById('quantity').value);
+  const inv = parseFloat(document.getElementById('invested').value);
+  const curr = document.getElementById('devise').value;
+  if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
+  const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
+  portfolio.push({ type, sym, qty, inv, curr });
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  await refreshAll();
+}
+
+async function refreshAll() {
+  const tbodyA = document.getElementById("tableAction");
+  const tbodyC = document.getElementById("tableCrypto");
+  const advice = document.getElementById("adviceList");
+  const perf = document.getElementById("globalPerf");
+  tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = "";
+  let inv = 0, val = 0;
+
+  for (let a of portfolio) {
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym) : await fetchAction(a.sym);
+    if (!info) {
+      const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
+      (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+      continue;
+    }
+    const value = info.price * a.qty;
+    const gain = value - a.inv;
+    const change = info.change.toFixed(2);
+    const gainClass = gain >= 0 ? 'gain' : 'perte';
+    inv += a.inv;
+    val += value;
+    const row = `<tr>
+      <td>${a.sym.toUpperCase()}</td>
+      <td>${a.qty}</td>
+      <td>${a.inv.toFixed(2)}</td>
+      <td>${info.price.toFixed(2)}</td>
+      <td>${value.toFixed(2)}</td>
+      <td class="${gainClass}">${change}%</td>
+      <td>${info.currency}</td>
+    </tr>`;
+    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+    advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
+  }
+
+  const totalGain = val - inv;
+  const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
+  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
+  fetchOpportunities();
+}
+
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
   try {
-    const res = await fetch("https://api.coincap.io/v2/assets?limit=15");
+    const res = await fetch("https://api.coincap.io/v2/assets?limit=20");
     const data = await res.json();
     const top = data.data
-      .filter(c => parseFloat(c.changePercent24Hr) >= 5)
-      .sort((a, b) => parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr))
+      .filter(c => parseFloat(c.changePercent24Hr) > 5)
       .slice(0, 5);
-
-    if (top.length === 0) {
-      ul.innerHTML = '<li>Aucune opportunité majeure détectée.</li>';
-      return;
-    }
-
     top.forEach(c => {
       ul.innerHTML += `<li>${c.name} (${c.symbol}) : +${parseFloat(c.changePercent24Hr).toFixed(2)}%</li>`;
     });
-  } catch (err) {
-    ul.innerHTML = '<li>Erreur de récupération des opportunités.</li>';
-    console.warn("Erreur CoinCap", err);
+  } catch {
+    ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
 
 window.onload = () => {
   refreshAll();
-  setInterval(refreshAll, 5 * 60 * 1000); // rafraîchit toutes les 5 minutes
+  setInterval(refreshAll, 5 * 60 * 1000); // toutes les 5 minutes
 };
+</script>
+</body>
+  </html>
