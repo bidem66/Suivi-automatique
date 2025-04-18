@@ -93,25 +93,13 @@
   <script>
   const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
   let portfolio = [
-    let portfolio = [
-  // Actions (USD)
-  { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, curr: 'usd' },
-  { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
-  { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, curr: 'usd' },
-  { type: 'action', sym: 'CRM', qty: 0.2271, inv: 57.97, curr: 'usd' },
-  { type: 'action', sym: 'GLD', qty: 0.2022, inv: 59.99, curr: 'usd' },
-  { type: 'action', sym: 'SLV', qty: 1.0, inv: 29.45, curr: 'usd' },
+    // Tes actifs initiaux (à mettre à jour si besoin)
+    { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, curr: 'cad' },
+    { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, curr: 'cad' },
+    { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, curr: 'usd' },
+    { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' }
+  ];
 
-  // Cryptos (CAD)
-  { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, curr: 'cad' },
-  { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, curr: 'cad' },
-  { type: 'crypto', sym: 'solana', qty: 0.988, inv: 180.00, curr: 'cad' },
-  { type: 'crypto', sym: 'chainlink', qty: 4.9401, inv: 90.00, curr: 'cad' },
-  { type: 'crypto', sym: 'cardano', qty: 89.6204, inv: 80.00, curr: 'cad' },
-  { type: 'crypto', sym: 'polkadot', qty: 13.3732, inv: 70.00, curr: 'cad' },
-  { type: 'crypto', sym: 'avalanche-2', qty: 1.7365, inv: 50.00, curr: 'cad' },
-  { type: 'crypto', sym: 'pepe', qty: 2.89275, inv: 30.00, curr: 'cad' }
-];
   async function fetchCrypto(sym) {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
     try {
@@ -147,7 +135,10 @@
     let inv = 0, val = 0;
 
     for (let a of portfolio) {
-      const info = a.type === 'crypto' ? await fetchCrypto(a.sym) : await fetchAction(a.sym);
+      const info = a.type === 'crypto'
+        ? await fetchCrypto(a.sym)
+        : await fetchAction(a.sym.toUpperCase());
+
       if (!info) continue;
 
       const value = info.price * a.qty;
@@ -162,11 +153,7 @@
       if (a.type === 'crypto') tbodyC.innerHTML += row;
       else tbodyA.innerHTML += row;
 
-      const tip = a.sym === 'bitcoin' && info.price < 62000 ? 'Acheter (BTC < 62k)' :
-                  a.sym === 'ethereum' && info.price < 2800 ? 'Renforcer ETH' :
-                  a.sym === 'aapl' && info.price < 160 ? 'Acheter AAPL' :
-                  a.sym === 'tsla' && info.price < 160 ? 'Renforcer TSLA' : 'Garder';
-      advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${tip}</li>`;
+      advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
     }
 
     const totalGain = val - inv;
@@ -181,7 +168,7 @@
     const ul = document.getElementById("opportunities");
     ul.innerHTML = '';
     try {
-      const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1&sparkline=false");
+      const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1");
       const data = await res.json();
       data.forEach(c => {
         ul.innerHTML += `<li>${c.name} (${c.symbol.toUpperCase()}) : +${c.price_change_percentage_24h.toFixed(2)}%</li>`;
@@ -193,12 +180,14 @@
 
   function addAsset() {
     const type = document.getElementById('type').value;
-    const sym = document.getElementById('symbol').value.trim().toLowerCase();
+    const symInput = document.getElementById('symbol').value.trim();
     const qty = parseFloat(document.getElementById('quantity').value);
     const inv = parseFloat(document.getElementById('invested').value);
     const curr = document.getElementById('devise').value;
 
-    if (!sym || !qty || !inv) return alert('Champs requis');
+    if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
+
+    const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
     portfolio.push({ type, sym, qty, inv, curr });
     refreshAll();
   }
@@ -217,5 +206,3 @@
 
   window.onload = refreshAll;
 </script>
-</body>
-</html>
