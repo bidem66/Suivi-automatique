@@ -2,7 +2,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Suivi de Portefeuille Temps Réel</title>
+  <title>Dashboard Portefeuille</title>
   <!-- OneSignal SDK -->
   <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
   <script>
@@ -17,63 +17,100 @@
     });
   </script>
   <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #eef2f7; }
-    .container { max-width: 1000px; margin: auto; background: #fff; padding: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); border-radius: 8px; }
-    h1 { text-align: center; margin-bottom: 10px; }
-    h2 { margin-top: 30px; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { padding: 10px; border: 1px solid #ccc; text-align: center; }
-    th { background: #f0f0f0; }
-    tbody tr:nth-child(even) { background: #fafafa; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Segoe UI", sans-serif; background: #eef2f7; color: #333; }
+    .container { max-width: 1000px; margin: 20px auto; padding: 20px; background: #fff; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+    h1 { text-align: center; margin-bottom: 20px; font-size: 1.8em; }
+    .controls { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 20px; }
+    .controls > * { flex: 1; min-width: 120px; }
+    .btn-refresh, button { background: #007bff; color: #fff; border: none; padding: 10px; cursor: pointer; border-radius: 4px; font-size: 0.9em; }
+    .btn-refresh:hover, button:hover { background: #005bb5; }
+    .input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; }
+    #resumeGlobal { background: #f7f7f7; padding: 15px; border-radius: 4px; margin-bottom: 20px; font-size: 1.1em; }
+    section { margin-top: 30px; }
+    h2 { font-size: 1.4em; margin-bottom: 10px; border-bottom: 2px solid #ddd; padding-bottom: 5px; }
+    .table-wrapper { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    th, td { padding: 8px 10px; text-align: center; border-bottom: 1px solid #ddd; }
+    th { background: #f7f7f7; font-weight: 600; }
+    tr:nth-child(even) { background: #fafafa; }
     .gain { color: #2e7d32; }
     .perte { color: #c62828; }
-    .reco { font-weight: bold; }
-    .form-inline { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 10px 0; }
-    .form-inline select, .form-inline input, .form-inline button { padding: 8px; font-size: 0.95em; }
-    .btn-refresh { background: #0277bd; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; }
-    #resumeGlobal { margin-top: 20px; font-size: 1.1em; }
-    #lastUpdate { text-align: center; font-size: 0.9em; color: #555; margin-top: 5px; }
+    .reco { font-weight: 600; }
+    #lastUpdate { text-align: right; font-size: 0.85em; color: #555; }
   </style>
 </head>
 <body>
   <div class="container">
-    <h1>Suivi de Portefeuille Temps Réel</h1>
-    <div class="form-inline">
-      <button id="refreshNow" class="btn-refresh">Actualiser maintenant</button>
-    </div>
-    <div class="form-inline">
-      <select id="typeAsset"><option value="crypto">Crypto (CAD)</option><option value="action">Action/Métal (USD)</option></select>
-      <input id="symbol" type="text" placeholder="Symbole (bitcoin ou AAPL)">
-      <input id="quantity" type="number" placeholder="Quantité" step="any">
-      <input id="invested" type="number" placeholder="Montant investi" step="any">
-      <button id="addAsset">Ajouter</button>
-      <button id="removeAsset">Supprimer</button>
-    </div>
-    <div id="resumeGlobal"></div>
-    <div id="lastUpdate"></div><h2>Cryptos (CAD)</h2>
-<table id="tableCrypto"><thead><tr><th>Symbole</th><th>Qté</th><th>Inv.</th><th>Prix Achat</th><th>Valeur</th><th>Gain</th><th>%</th><th>Reco</th></tr></thead><tbody></tbody></table>
+    <h1>Dashboard Portefeuille</h1><div class="controls">
+  <button id="refreshNow" class="btn-refresh">Actualiser maintenant</button>
+  <select id="typeAsset" class="input">
+    <option value="crypto_cad">Crypto (CAD)</option>
+    <option value="crypto_usd">Crypto (USD)</option>
+    <option value="action_usd">Action (USD)</option>
+    <option value="action_cad">Action (CAD)</option>
+  </select>
+  <input id="symbol" type="text" placeholder="Symbole (bitcoin ou AAPL)" class="input">
+  <input id="quantity" type="number" placeholder="Quantité" step="any" class="input">
+  <input id="invested" type="number" placeholder="Montant investi" step="any" class="input">
+  <button id="addAsset" class="btn-refresh">Ajouter</button>
+  <button id="removeAsset" class="btn-refresh">Supprimer</button>
+</div>
 
-<h2>Actions / Métaux (USD)</h2>
-<table id="tableAction"><thead><tr><th>Symbole</th><th>Qté</th><th>Inv.</th><th>Prix Achat</th><th>Valeur</th><th>Gain</th><th>%</th><th>Reco</th></tr></thead><tbody></tbody></table>
+<div id="resumeGlobal"></div>
+<div id="lastUpdate"></div>
 
-<h2>Top Opportunités ≥20% (24h)</h2>
-<table id="tableTop"><thead><tr><th>Actif</th><th>Var. 24h %</th><th>Délai</th></tr></thead><tbody></tbody></table>
+<section>
+  <h2>Cryptos</h2>
+  <div class="table-wrapper">
+    <table id="tableCrypto">
+      <thead>
+        <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix Actuel</th><th>Valeur</th><th>Gain</th><th>%</th><th>Reco</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Actions / Métaux</h2>
+  <div class="table-wrapper">
+    <table id="tableAction">
+      <thead>
+        <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix Actuel</th><th>Valeur</th><th>Gain</th><th>%</th><th>Reco</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section>
+  <h2>Top Opportunités ≥20% (24h)</h2>
+  <div class="table-wrapper">
+    <table id="tableTop">
+      <thead>
+        <tr><th>Actif</th><th>Var. 24h %</th><th>Délai</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
 
   </div>  <script>
     const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
-    const CG_IDS = { sol: 'solana', link: 'chainlink', ada: 'cardano', dot: 'polkadot', avax: 'avalanche-2', pepe: 'pepe' };
+    const CG_IDS = { sol:'solana', link:'chainlink', ada:'cardano', dot:'polkadot', avax:'avalanche-2', pepe:'pepe' };
     const defaultPortfolio = [
-      { type:'action', sym:'GLD', qty:0.2022, inv:59.99 },
-      { type:'action', sym:'SLV', qty:1.0, inv:29.45 },
-      { type:'action', sym:'CRM', qty:0.2271, inv:57.97 },
-      { type:'action', sym:'TSLA', qty:0.2822, inv:72.00 },
-      { type:'action', sym:'NVDA', qty:0.7767, inv:86.96 },
-      { type:'crypto', sym:'sol', qty:0.988, inv:180.00 },
-      { type:'crypto', sym:'link', qty:4.9401, inv:90.00 },
-      { type:'crypto', sym:'ada', qty:89.6204, inv:80.00 },
-      { type:'crypto', sym:'dot', qty:13.3732, inv:70.00 },
-      { type:'crypto', sym:'avax', qty:1.7365, inv:50.00 },
-      { type:'crypto', sym:'pepe', qty:2.89275, inv:30.00 }
+      {type:'action',sym:'GLD', qty:0.2022,inv:59.99,curr:'usd'},
+      {type:'action',sym:'SLV', qty:1.0,   inv:29.45,curr:'usd'},
+      {type:'action',sym:'CRM', qty:0.2271,inv:57.97,curr:'usd'},
+      {type:'action',sym:'TSLA',qty:0.2822,inv:72.00,curr:'usd'},
+      {type:'action',sym:'NVDA',qty:0.7767,inv:86.96,curr:'usd'},
+      {type:'crypto',sym:'sol', qty:0.988, inv:180.00,curr:'cad'},
+      {type:'crypto',sym:'link',qty:4.9401,inv:90.00,curr:'cad'},
+      {type:'crypto',sym:'ada', qty:89.6204,inv:80.00,curr:'cad'},
+      {type:'crypto',sym:'dot', qty:13.3732,inv:70.00,curr:'cad'},
+      {type:'crypto',sym:'avax',qty:1.7365,inv:50.00,curr:'cad'},
+      {type:'crypto',sym:'pepe',qty:2.89275,inv:30.00,curr:'cad'}
     ];
     let portfolio = JSON.parse(localStorage.getItem('portfolio')) || defaultPortfolio;
     localStorage.setItem('portfolio', JSON.stringify(portfolio));
@@ -83,74 +120,108 @@
     const tt = document.querySelector('#tableTop tbody');
     const res = document.getElementById('resumeGlobal');
     const last = document.getElementById('lastUpdate');
+    let refreshInterval = 2 * 60 * 1000, timer;
 
-    let refreshInterval = 2 * 60 * 1000;
-    let timerId;
-
-    document.getElementById('addAsset').onclick = () => modifyAsset(true);
+    document.getElementById('refreshNow').onclick = () => { clearTimeout(timer); refreshAll(); };
+    document.getElementById('addAsset').onclick    = () => modifyAsset(true);
     document.getElementById('removeAsset').onclick = () => modifyAsset(false);
-    document.getElementById('refreshNow').onclick = manualRefresh;
 
     function modifyAsset(add) {
-      const type = document.getElementById('typeAsset').value;
-      let sym = document.getElementById('symbol').value.trim();
-      if (!sym) return alert('Symbole requis');
-      sym = type==='crypto'? sym.toLowerCase(): sym.toUpperCase();
-      const qty = parseFloat(document.getElementById('quantity').value);
-      const inv = parseFloat(document.getElementById('invested').value);
-      const idx = portfolio.findIndex(a=>a.type===type&&a.sym===sym);
+      const [type, curr] = document.getElementById('typeAsset').value.split('_');
+      let sym = document.getElementById('symbol').value.trim(); if (!sym) return alert('Symbole requis');
+      sym = type==='crypto'? sym.toLowerCase() : sym.toUpperCase();
+      const qty = parseFloat(document.getElementById('quantity').value); const inv = parseFloat(document.getElementById('invested').value);
+      if (add && (!qty || !inv)) return alert('Qté et montant investis requis');
+      const idx = portfolio.findIndex(a=>a.type===type && a.sym===sym && a.curr===curr);
       if (add) {
-        if (!qty||!inv) return alert('Qté et inv. requis');
-        const entry={type,sym,qty,inv};
-        idx>-1? portfolio[idx]=entry: portfolio.push(entry);
-      } else {
-        if(idx>-1) portfolio.splice(idx,1);
+        const entry = {type,sym,qty,inv,curr};
+        idx>-1? portfolio[idx]=entry : portfolio.push(entry);
+      } else if (idx>-1) {
+        portfolio.splice(idx,1);
       }
       localStorage.setItem('portfolio', JSON.stringify(portfolio));
-      manualRefresh();
+      clearTimeout(timer); refreshAll();
     }
 
-    async function fetchCrypto(sym) {
-      const id=CG_IDS[sym]||sym;
-      try{ const j=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=cad&include_24hr_change=true`).then(r=>r.json()); return j[id]||{};}catch{return{}};
+    async function fetchCrypto(sym, vs) {
+      const id = CG_IDS[sym]||sym;
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=${vs}&include_24hr_change=true`;
+      try { const j = await fetch(url).then(r=>r.json()); return j[id]||{}; } catch { return {}; }
     }
+
     async function fetchAction(sym) {
-      try{
-        const j=await fetch(`https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${ALPHA_KEY}`).then(r=>r.json());
-        const g=j['Global Quote']||{};
-        return { price:parseFloat(g['05. price'])||0, change:parseFloat(g['10. change percent'])||0 };
-      }catch{return{price:0,change:0}};
+      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${ALPHA_KEY}`;
+      try { const j = await fetch(url).then(r=>r.json()); const g = j['Global Quote']||{}; return { price:parseFloat(g['05. price'])||0, change:parseFloat(g['10. change percent'])||0 }; } catch { return { price:0, change:0 }; }
     }
 
-    async function fetchGlobalOpportunities() {
+    async function fetchOpportunities() {
       try {
-        const data = await fetch('https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=10&price_change_percentage=24h').then(r=>r.json());
-        return data.filter(c=>c.price_change_percentage_24h>=20).slice(0,5).map(c=>({ sym:c.symbol.toUpperCase(), change:c.price_change_percentage_24h }));
+        const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=100&page=1&price_change_percentage=24h';
+        const data = await fetch(url).then(r=>r.json());
+        return data.filter(c=>c.price_change_percentage_24h>=20).slice(0,5)
+                   .map(c=>({ sym:c.symbol.toUpperCase(), change:c.price_change_percentage_24h }));
       } catch { return []; }
     }
 
     async function refreshAll() {
-      clearTimeout(timerId);
-      tc.innerHTML=''; ta.innerHTML=''; tt.innerHTML='';
-      let invCAD=0,valCAD=0,invUSD=0,valUSD=0; const tops=[];
-      for(const a of portfolio){
-        let price=0,change=0;
-        if(a.type==='crypto'){const i=await fetchCrypto(a.sym);price=i.cad||0;change=i.cad_24h_change||0;} else {const i=await fetchAction(a.sym);price=i.price;change=i.change;}
-        const val=price*a.qty, gain=val-a.inv, pct=a.inv?((gain/a.inv)*100).toFixed(2):'0.00';
-        const reco=change>15?'Renforcer':change<-10?'Vendre':'Garder';
-        const row=`<tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${(a.inv/a.qty).toFixed(2)}</td><td>${val.toFixed(2)}</td><td class="${gain>=0?'gain':'perte'}">${gain.toFixed(2)}</td><td class="${gain>=0?'gain':'perte'}">${pct}%</td><td class="reco">${reco}</td></tr>`;
-        if(a.type==='crypto'){tc.insertAdjacentHTML('beforeend',row);invCAD+=a.inv;valCAD+=val;} else{ta.insertAdjacentHTML('beforeend',row);invUSD+=a.inv;valUSD+=val;}
-        if(change>=20)tops.push({sym:a.sym.toUpperCase(),c:change});
-        if(change>15||change<-10)OneSignal.push(()=>OneSignal.sendSelfNotification(change>15?'Hausse forte':'Chute forte',`${a.sym.toUpperCase()} ${change.toFixed(2)}%`,null,null));
+      tc.innerHTML = '';
+      ta.innerHTML = '';
+      tt.innerHTML = '';
+      let invCAD=0, valCAD=0, invUSD=0, valUSD=0; const tops=[];
+      for (const a of portfolio) {
+        let price=0, change=0;
+        if (a.type==='crypto') {
+          const o = await fetchCrypto(a.sym, a.curr);
+          price  = o[a.curr]||0;
+          change = o[`${a.curr}_24h_change`]||0;
+        } else {
+          const o = await fetchAction(a.sym);
+          price  = o.price;
+          change = o.change;
+        }
+        const value = price * a.qty;
+        const gain  = value - a.inv;
+        const pct   = a.inv?((gain/a.inv)*100).toFixed(2) : '0.00';
+        const reco  = change>15 ? 'Renforcer' : change<-10 ? 'Vendre' : 'Garder';
+        const cur   = a.curr.toUpperCase();
+        const row   = `
+          <tr>
+            <td>${a.sym.toUpperCase()}</td>
+            <td>${a.qty}</td>
+            <td>${a.inv.toFixed(2)} ${cur}</td>
+            <td>${price.toFixed(2)} ${cur}</td>
+            <td>${value.toFixed(2)} ${cur}</td>
+            <td class="${gain>=0?'gain':'perte'}">${gain.toFixed(2)} ${cur}</td>
+            <td class="${gain>=0?'gain':'perte'}">${pct}%</td>
+            <td class="reco">${reco}</td>
+          </tr>`;
+        if (a.type==='crypto') {
+          tc.insertAdjacentHTML('beforeend', row);
+          if(a.curr==='cad') { invCAD+=a.inv; valCAD+=value; } else { invUSD+=a.inv; valUSD+=value; }
+        } else {
+          ta.insertAdjacentHTML('beforeend', row);
+          if(a.curr==='usd') { invUSD+=a.inv; valUSD+=value; } else { invCAD+=a.inv; valCAD+=value; }
+        }
+        if (change>=20) tops.push({ sym: a.sym.toUpperCase(), change });
+        if (change>15 || change<-10)
+          OneSignal.sendSelfNotification(
+            change>15? 'Hausse forte': 'Chute forte',
+            `${a.sym.toUpperCase()} ${change.toFixed(2)}%`,
+            null, null
+          );
       }
-      if(tops.length===0){const g=await fetchGlobalOpportunities();tops.push(...g);}
-      res.innerHTML=`<h2>Résumé Global</h2><p>Crypto : Inv ${invCAD.toFixed(2)} CAD, Val ${valCAD.toFixed(2)} CAD, Gain ${(valCAD-invCAD).toFixed(2)} CAD (${invCAD?((valCAD-invCAD)/invCAD*100).toFixed(2):0}%)</p><p>Actions : Inv ${invUSD.toFixed(2)} USD, Val ${valUSD.toFixed(2)} USD, Gain ${(valUSD-invUSD).toFixed(2)} USD (${invUSD?((valUSD-invUSD)/invUSD*100).toFixed(2):0}%)</p>`;
-      last.textContent=`Mis à jour : ${new Date().toLocaleTimeString()}`;
-      tops.sort((a,b)=>b.c-a.c).slice(0,5).forEach(o=>tt.insertAdjacentHTML('beforeend',`<tr><td>${o.sym}</td><td>${o.c.toFixed(2)}</td><td>24h</td></tr>`));
-      timerId = setTimeout(refreshAll, refreshInterval);
+      if (!tops.length) tops.push(...await fetchOpportunities());
+      res.innerHTML = `
+        <strong>Résumé Global</strong>
+        <p>Crypto: Investi ${invCAD.toFixed(2)} CAD, Valeur ${valCAD.toFixed(2)} CAD</p>
+        <p>Actions: Investi ${invUSD.toFixed(2)} USD, Valeur ${valUSD.toFixed(2)} USD</p>
+      `;
+      last.textContent = `Mis à jour: ${new Date().toLocaleTimeString()}`;
+      tops.sort((a,b)=>b.change-a.change).slice(0,5).forEach(o => {
+        tt.insertAdjacentHTML('beforeend', `<tr><td>${o.sym}</td><td>${o.change.toFixed(2)}%</td><td>24h</td></tr>`);
+      });
+      timer = setTimeout(refreshAll, refreshInterval);
     }
-
-    function manualRefresh() { refreshAll(); }
     refreshAll();
   </script></body>
 </html>
