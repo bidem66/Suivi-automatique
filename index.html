@@ -69,7 +69,7 @@
   </div>  <h2>Actions</h2>
 <table>
   <thead>
-    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Var. 24h</th></tr>
+    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Var. 24h</th><th>Devise</th></tr>
   </thead>
   <tbody id="tableAction"></tbody>
 </table><h2>Cryptos</h2>
@@ -94,14 +94,13 @@
 <script>
     const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
     const portfolio = [
-  { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, price: 0, change: 0 },
+  // Format : type, sym, qty, inv, price, change, curr
+  // Actions USD
+  { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, price: 0, change: 0, curr: 'usd' },
   { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, price: 0, change: 0 },
-  { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, price: 0, change: 0 },
-  { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, price: 0, change: 0 },
-  { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, price: 0, change: 0 },
-  { type: 'crypto', sym: 'solana', qty: 0.75, inv: 160, price: 0, change: 0 },
-  { type: 'crypto', sym: 'cardano', qty: 200, inv: 95, price: 0, change: 0 }
-];async function fetchCryptoPrice(symbol) {
+  { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, price: 0, change: 0 },// Cryptos CAD { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, price: 0, change: 0 }, { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, price: 0, change: 0 }, { type: 'crypto', sym: 'solana', qty: 0.75, inv: 160, price: 0, change: 0, curr: 'cad' }, { type: 'crypto', sym: 'cardano', qty: 200, inv: 95, price: 0, change: 0, curr: 'cad' } ];
+
+async function fetchCryptoPrice(symbol) {
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${symbol}&vs_currencies=cad&include_24hr_change=true`;
   try {
     const res = await fetch(url);
@@ -141,7 +140,7 @@ async function addAsset() {
 
 async function display() {
 
-const tbodyA = document.getElementById('tableAction'); const tbodyC = document.getElementById('tableCrypto'); let totalInv = 0, totalVal = 0; const conseils = document.querySelector('.opps ul'); tbodyA.innerHTML = ''; tbodyC.innerHTML = ''; conseils.innerHTML = ''; for (const a of portfolio) { if (a.type === 'crypto') { const data = await fetchCryptoPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } else { const data = await fetchActionPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } const val = (a.price * a.qty).toFixed(2); const changeClass = a.change >= 0 ? 'gain' : 'perte'; totalInv += a.inv; totalVal += parseFloat(val); const row = <tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${a.price.toFixed(2)}</td><td>${val}</td><td class="${changeClass}">${a.change.toFixed(2)}%</td></tr>; if (a.type === 'action') tbodyA.innerHTML += row; else tbodyC.innerHTML += row;
+const tbodyA = document.getElementById('tableAction'); const tbodyC = document.getElementById('tableCrypto'); let totalInv = 0, totalVal = 0; const conseils = document.querySelector('.opps ul'); tbodyA.innerHTML = ''; tbodyC.innerHTML = ''; conseils.innerHTML = ''; for (const a of portfolio) { if (a.type === 'crypto') { const data = await fetchCryptoPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } else { const data = await fetchActionPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } const val = (a.price * a.qty).toFixed(2); const changeClass = a.change >= 0 ? 'gain' : 'perte'; totalInv += a.inv; totalVal += parseFloat(val); const row = <tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${a.price.toFixed(2)}</td><td>${val}</td><td class="${changeClass}">${a.change.toFixed(2)}%</td><td>${a.curr.toUpperCase()}</td></tr>; if (a.type === 'action') tbodyA.innerHTML += row; else tbodyC.innerHTML += row;
 
 let conseil = 'Garder';
 if (a.sym === 'aapl' && a.price < 160) conseil = 'Acheter (sous $160)';
