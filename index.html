@@ -2,27 +2,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Portefeuille Crypto & Actions</title>
+  <title>Portefeuille</title>
   <style>
+    html {
+      zoom: 0.9;
+    }
     body {
       font-family: sans-serif;
       background: #f4f4f4;
-      margin: 0; padding: 20px;
-      display: flex; flex-direction: column; align-items: center;
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     .controls, table, .opps {
-      max-width: 600px;
       width: 100%;
+      max-width: 800px;
       margin-bottom: 20px;
     }
     .controls input, .controls select, .controls button {
-      padding: 10px; margin: 5px; width: calc(100% - 22px);
+      padding: 10px;
+      margin: 5px;
+      width: 100%;
+      box-sizing: border-box;
     }
-    table { border-collapse: collapse; background: #fff; }
-    th, td { padding: 10px; border: 1px solid #ddd; text-align: center; }
-    th { background: #eee; }
-    .gain { color: green; }
-    .perte { color: red; }
+    table {
+      border-collapse: collapse;
+      background: #fff;
+      overflow-x: auto;
+    }
+    th, td {
+      padding: 10px;
+      border: 1px solid #ddd;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+    .gain {
+      color: green;
+    }
+    .perte {
+      color: red;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    ul#opportunityList {
+      padding-left: 20px;
+    }
   </style>
 </head>
 <body>
@@ -37,103 +66,121 @@
     <input id="invested" type="number" placeholder="Investi (CAD)" />
     <button onclick="addAsset()">Ajouter</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>  <table>
-    <thead>
-      <tr><th>Type</th><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Var. 24h</th></tr>
-    </thead>
-    <tbody id="portfolio"></tbody>
-  </table>  <div class="opps">
+  </div>  <h2>Actions</h2>
+<table>
+  <thead>
+    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Var. 24h</th></tr>
+  </thead>
+  <tbody id="tableAction"></tbody>
+</table><h2>Cryptos</h2>
+<table>
+  <thead>
+    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Var. 24h</th></tr>
+  </thead>
+  <tbody id="tableCrypto"></tbody>
+</table>  <div class="opps">
     <h2>Opportunités du moment</h2>
     <ul id="opportunityList"></ul>
-  </div>  <script>
+  </div>  <div class="opps">
+    <h2>Conseils personnalisés</h2>
+    <ul>
+      <li><strong>AAPL</strong> : Garder. Acheter sous $160 si repli.</li>
+      <li><strong>TSLA</strong> : Renforcer sous $160, vendre si +20%.</li>
+      <li><strong>BTC</strong> : Garder. Acheter si < $62k. Objectif $74k.</li>
+      <li><strong>ETH</strong> : Renforcer sous $2800. Objectif > $3300.</li>
+    </ul>
+  <div id="perfGlobal" style="text-align:center; font-weight:bold; margin-top:10px;"></div>
+</div>
+<script>
     const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
     const portfolio = [
   { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, price: 0, change: 0 },
   { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, price: 0, change: 0 },
+  { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, price: 0, change: 0 },
   { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, price: 0, change: 0 },
-  { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, price: 0, change: 0 }
-];
+  { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, price: 0, change: 0 },
+  { type: 'crypto', sym: 'solana', qty: 0.75, inv: 160, price: 0, change: 0 },
+  { type: 'crypto', sym: 'cardano', qty: 200, inv: 95, price: 0, change: 0 }
+];async function fetchCryptoPrice(symbol) {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${symbol}&vs_currencies=cad&include_24hr_change=true`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    return data[symbol] ? { price: data[symbol].cad, change: data[symbol].cad_24h_change } : null;
+  } catch { return null; }
+}
 
-    async function fetchCryptoPrice(symbol) {
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${symbol}&vs_currencies=cad&include_24hr_change=true`;
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        return data[symbol] ? { price: data[symbol].cad, change: data[symbol].cad_24h_change } : null;
-      } catch { return null; }
-    }
+async function fetchActionPrice(symbol) {
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    const quote = data['Global Quote'];
+    const price = parseFloat(quote['05. price']);
+    const change = parseFloat(quote['10. change percent']);
+    return { price, change };
+  } catch { return null; }
+}
 
-    async function fetchActionPrice(symbol) {
-      const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_KEY}`;
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        const quote = data['Global Quote'];
-        const price = parseFloat(quote['05. price']);
-        const change = parseFloat(quote['10. change percent']);
-        return { price, change };
-      } catch { return null; }
-    }
+async function addAsset() {
+  const type = document.getElementById('type').value;
+  const sym = document.getElementById('symbol').value.trim().toLowerCase();
+  const qty = parseFloat(document.getElementById('quantity').value);
+  const inv = parseFloat(document.getElementById('invested').value);
+  if (!sym || !qty || !inv) return alert('Tous les champs sont requis.');
 
-    async function addAsset() {
-      const type = document.getElementById('type').value;
-      const sym = document.getElementById('symbol').value.trim().toLowerCase();
-      const qty = parseFloat(document.getElementById('quantity').value);
-      const inv = parseFloat(document.getElementById('invested').value);
-      if (!sym || !qty || !inv) return alert('Tous les champs sont requis.');
+  let data;
+  if (type === 'crypto') data = await fetchCryptoPrice(sym);
+  else data = await fetchActionPrice(sym.toUpperCase());
 
-      let data;
-      if (type === 'crypto') data = await fetchCryptoPrice(sym);
-      else data = await fetchActionPrice(sym.toUpperCase());
+  if (!data || !data.price) return alert('Erreur récupération prix.');
 
-      if (!data || !data.price) return alert('Erreur récupération prix.');
+  portfolio.push({ type, sym, qty, inv, price: data.price, change: data.change });
+  display();
+}
 
-      portfolio.push({ type, sym, qty, inv, price: data.price, change: data.change });
-      display();
-    }
+async function display() {
 
-    async function display() {
-  const tbody = document.getElementById('portfolio');
-  tbody.innerHTML = '';
-  for (const a of portfolio) {
-    if (a.type === 'crypto') {
-      const data = await fetchCryptoPrice(a.sym);
-      if (data) { a.price = data.price; a.change = data.change; }
-    } else {
-      const data = await fetchActionPrice(a.sym);
-      if (data) { a.price = data.price; a.change = data.change; }
-    }
-    const val = (a.price * a.qty).toFixed(2);
-    const changeClass = a.change >= 0 ? 'gain' : 'perte';
-    tbody.innerHTML += `<tr><td>${a.type}</td><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${a.price.toFixed(2)}</td><td>${val}</td><td class="${changeClass}">${a.change.toFixed(2)}%</td></tr>`;
+const tbodyA = document.getElementById('tableAction'); const tbodyC = document.getElementById('tableCrypto'); let totalInv = 0, totalVal = 0; const conseils = document.querySelector('.opps ul'); tbodyA.innerHTML = ''; tbodyC.innerHTML = ''; conseils.innerHTML = ''; for (const a of portfolio) { if (a.type === 'crypto') { const data = await fetchCryptoPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } else { const data = await fetchActionPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } const val = (a.price * a.qty).toFixed(2); const changeClass = a.change >= 0 ? 'gain' : 'perte'; totalInv += a.inv; totalVal += parseFloat(val); const row = <tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${a.price.toFixed(2)}</td><td>${val}</td><td class="${changeClass}">${a.change.toFixed(2)}%</td></tr>; if (a.type === 'action') tbodyA.innerHTML += row; else tbodyC.innerHTML += row;
+
+let conseil = 'Garder';
+if (a.sym === 'aapl' && a.price < 160) conseil = 'Acheter (sous $160)';
+if (a.sym === 'tsla') {
+  if (a.price < 160) conseil = 'Renforcer';
+  else if ((a.price * a.qty - a.inv) / a.inv > 0.2) conseil = 'Vendre (gain > 20%)';
+}
+if (a.sym === 'bitcoin' && a.price < 62000) conseil = 'Acheter (sous $62k)';
+if (a.sym === 'ethereum' && a.price < 2800) conseil = 'Renforcer (sous $2800)';
+    conseils.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${conseil}</li>`;
+
+} } } else { const data = await fetchActionPrice(a.sym); if (data) { a.price = data.price; a.change = data.change; } } const val = (a.price * a.qty).toFixed(2); const changeClass = a.change >= 0 ? 'gain' : 'perte'; tbody.innerHTML += <tr><td>${a.type}</td><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${a.price.toFixed(2)}</td><td>${val}</td><td class="${changeClass}">${a.change.toFixed(2)}%</td></tr>; } }
+
+async function fetchOpportunities() {
+  const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=10&page=1&sparkline=false';
+  const list = document.getElementById('opportunityList');
+  list.innerHTML = '';
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    data.forEach(c => {
+      const p = c.price_change_percentage_24h;
+      const item = document.createElement('li');
+      item.textContent = `${c.name} (${c.symbol.toUpperCase()}) : +${p.toFixed(2)}%`;
+      list.appendChild(item);
+    });
+  } catch {
+    list.innerHTML = '<li>Erreur chargement opportunités.</li>';
   }
-}</td><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${a.price.toFixed(2)}</td><td>${val}</td><td class="${changeClass}">${a.change.toFixed(2)}%</td></tr>`;
-      });
-    }
+}
 
-    async function fetchOpportunities() {
-      const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=10&page=1&sparkline=false';
-      const list = document.getElementById('opportunityList');
-      list.innerHTML = '';
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        data.forEach(c => {
-          const p = c.price_change_percentage_24h;
-          const item = document.createElement('li');
-          item.textContent = `${c.name} (${c.symbol.toUpperCase()}) : +${p.toFixed(2)}%`; 
-          list.appendChild(item);
-        });
-      } catch {
-        list.innerHTML = '<li>Erreur chargement opportunités.</li>';
-      }
-    }
+async function refreshAll() {
+  display();
+  fetchOpportunities();
 
-    async function refreshAll() {
-      display();
-      fetchOpportunities();
-    }
+const perf = document.getElementById('perfGlobal'); const gain = totalVal - totalInv; const pct = totalInv ? (gain / totalInv * 100).toFixed(2) : 0; perf.textContent = Performance globale : ${gain.toFixed(2)} CAD (${pct}%); perf.style.color = gain >= 0 ? 'green' : 'red'; }
 
-    refreshAll();
-  </script></body>
+refreshAll();
+
+  </script>
+</body>
 </html>
