@@ -274,63 +274,28 @@ function removeAsset() {
 }
     async function getCoinGeckoIdFromSymbol(symbol) {
   const forced = {
-    btc: 'bitcoin',
-    eth: 'ethereum',
-    sol: 'solana',
-    ada: 'cardano',
-    avax: 'avalanche-2',
-    link: 'chainlink',
-    dot: 'polkadot',
-    doge: 'dogecoin',
-    matic: 'matic-network',
-    ltc: 'litecoin',
-    bnb: 'binancecoin',
-    xrp: 'ripple',
-    pepe: 'pepe',
-    shib: 'shiba-inu',
-    uni: 'uniswap',
-    egld: 'elrond-erd-2',
-    atom: 'cosmos',
-    ftm: 'fantom',
-    near: 'near',
-    render: 'render-token',
-    aave: 'aave',
-    sushi: 'sushi',
-    sand: 'the-sandbox',
-    mana: 'decentraland',
-    gala: 'gala',
-    op: 'optimism',
-    arb: 'arbitrum',
-    comp: 'compound-governance-token',
-    inj: 'injective-protocol',
-    dodo: 'dodo',
-    ldo: 'lido-dao',
-    ape: 'apecoin',
-    dydx: 'dydx',
-    zk: 'zkfair',
-    gas: 'neo-gas',
-    vet: 'vechain',
-    zil: 'zilliqa',
-    enj: 'enjincoin',
-    chz: 'chiliz',
-    one: 'harmony',
-    xlm: 'stellar',
-    qtum: 'qtum',
-    cro: 'crypto-com-chain',
-    rose: 'oasis-network',
-    mina: 'mina-protocol'
+    btc: 'bitcoin', eth: 'ethereum', sol: 'solana', ada: 'cardano', avax: 'avalanche-2',
+    link: 'chainlink', dot: 'polkadot', pepe: 'pepe', doge: 'dogecoin', shib: 'shiba-inu',
+    ltc: 'litecoin', bnb: 'binancecoin', xrp: 'ripple', matic: 'matic-network', uni: 'uniswap',
+    egld: 'elrond-erd-2', atom: 'cosmos', ftm: 'fantom', near: 'near', render: 'render-token',
+    aave: 'aave', sushi: 'sushi', sand: 'the-sandbox', mana: 'decentraland', gala: 'gala',
+    op: 'optimism', arb: 'arbitrum', comp: 'compound-governance-token', inj: 'injective-protocol',
+    dodo: 'dodo', ldo: 'lido-dao', ape: 'apecoin', dydx: 'dydx', gas: 'neo-gas', vet: 'vechain',
+    zil: 'zilliqa', enj: 'enjincoin', chz: 'chiliz', one: 'harmony', xlm: 'stellar',
+    qtum: 'qtum', cro: 'crypto-com-chain', rose: 'oasis-network', mina: 'mina-protocol',
+    axs: 'axie-infinity', flow: 'flow', rune: 'thorchain', srm: 'serum', celo: 'celo',
+    kava: 'kava', stx: 'stacks', kas: 'kaspa', algo: 'algorand'
   };
-
-  const forcedId = forced[symbol.toLowerCase()];
-  if (forcedId) return forcedId;
+  const key = symbol.toLowerCase();
+  if (forced[key]) return forced[key];
 
   try {
     const res = await fetch('https://api.coingecko.com/api/v3/coins/list');
     const data = await res.json();
-    const match = data.find(coin => coin.symbol.toLowerCase() === symbol.toLowerCase());
+    const match = data.find(coin => coin.symbol.toLowerCase() === key);
     return match ? match.id : null;
   } catch (err) {
-    console.error("Erreur CoinGecko :", err);
+    console.error("Erreur de récupération CoinGecko :", err);
     return null;
   }
     }
@@ -351,7 +316,7 @@ function removeAsset() {
   if (type === 'crypto') {
     const id = await getCoinGeckoIdFromSymbol(symInput);
     if (!id) {
-      alert("Crypto non reconnue (CoinGecko).");
+      alert("Crypto non reconnue.");
       return;
     }
     sym = id;
