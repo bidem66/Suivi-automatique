@@ -112,27 +112,48 @@ let portfolio = [
   { type: 'crypto', sym: 'avalanche-2', qty: 1.7365, inv: 50.00, curr: 'cad' },
   { type: 'crypto', sym: 'pepe', qty: 2.89275, inv: 30.00, curr: 'cad' }
 ];
-  async function fetchCrypto(sym) {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      return data[sym] ? { price: data[sym].cad, change: data[sym].cad_24h_change } : null;
-    } catch { return null; }
+async function fetchCrypto(sym) {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data[sym]) {
+      console.warn("Crypto non trouvée CoinGecko:", sym);
+      return null;
+    }
+    return {
+      price: data[sym].cad,
+      change: data[sym].cad_24h_change
+    };
+  } catch (e) {
+    console.error("Erreur CoinGecko:", sym, e);
+    return null;
   }
+    }
 
-  async function fetchAction(sym) {
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${ALPHA_KEY}`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      const q = data["Global Quote"];
-      return {
-        price: parseFloat(q["05. price"]),
-        change: parseFloat(q["10. change percent"])
-      };
-    } catch { return null; }
+async function fetchAction(sym) {
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${ALPHA_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.Note) {
+      console.warn("Trop de requêtes pour Alpha Vantage (attente nécessaire)");
+      return null;
+    }
+    const g = data["Global Quote"];
+    if (!g || !g["05. price"]) {
+      console.warn("Action inconnue:", sym);
+      return null;
+    }
+    return {
+      price: parseFloat(g["05. price"]),
+      change: parseFloat(g["10. change percent"])
+    };
+  } catch (e) {
+    console.error("Erreur Alpha:", sym, e);
+    return null;
   }
+}
 
   async function refreshAll() {
     const tbodyA = document.getElementById("tableAction");
