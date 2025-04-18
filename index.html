@@ -13,9 +13,7 @@
       flex-direction: column;
       align-items: center;
     }
-    h1, h2 {
-      text-align: center;
-    }
+    h1, h2 { text-align: center; }
     .controls, table {
       max-width: 1000px;
       width: 100%;
@@ -83,121 +81,25 @@
     <tbody id="tableCrypto"></tbody>
   </table>  <h2>Opportunités du moment</h2>
   <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul><script>
-const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+  <ul id="adviceList"></ul>
+  <script>
+const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';let portfolio = JSON.parse(localStorage.getItem('portfolio')) || [ { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' }, { type: 'crypto', sym: 'bitcoin', qty: 0.005, inv: 300, curr: 'cad' } ];
 
-let portfolio = localStorage.getItem('portfolio')
-  ? JSON.parse(localStorage.getItem('portfolio'))
-  : [
-    { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
-    { type: 'crypto', sym: 'bitcoin', qty: 0.005, inv: 300, curr: 'cad' },
-  ];
+async function fetchCrypto(sym) { try { const res = await fetch(https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad,usd&include_24hr_change=true); const data = await res.json(); if (!data[sym]) return null; return { price: data[sym].cad || data[sym].usd, change: data[sym].cad_24h_change || data[sym].usd_24h_change || 0, currency: data[sym].cad ? 'CAD' : 'USD' }; } catch { return null; } }
 
-async function fetchAction(sym) {
-  try {
-    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
-    const data = await res.json();
-    if (!data.c) return null;
-    return {
-      price: data.c,
-      change: ((data.c - data.pc) / data.pc) * 100,
-      currency: 'USD'
-    };
-  } catch {
-    return null;
-  }
-}
+async function fetchAction(sym) { try { const res = await fetch(https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}); const data = await res.json(); if (!data.c) return null; return { price: data.c, change: ((data.c - data.pc) / data.pc) * 100, currency: 'USD' }; } catch { return null; } }
 
-async function fetchCrypto(sym) {
-  const map = {
-    btc: 'bitcoin', eth: 'ethereum', sol: 'solana', ada: 'cardano',
-    avax: 'avalanche-2', link: 'chainlink', dot: 'polkadot', pepe: 'pepe'
-  };
-  const id = map[sym.toLowerCase()] || sym.toLowerCase();
-  try {
-    const res = await fetch(`https://api.coincap.io/v2/assets/${id}`);
-    const data = await res.json();
-    if (!data?.data?.priceUsd) return null;
-    return {
-      price: parseFloat(data.data.priceUsd),
-      change: parseFloat(data.data.changePercent24Hr),
-      currency: 'USD'
-    };
-  } catch {
-    return null;
-  }
-}
+function removeAsset() { const sym = document.getElementById('removeSymbol').value.trim().toLowerCase(); portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym); localStorage.setItem('portfolio', JSON.stringify(portfolio)); refreshAll(); }
 
-function removeAsset() {
-  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
-  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
-  localStorage.setItem('portfolio', JSON.stringify(portfolio));
-  refreshAll();
-}
+async function addAsset() { const type = document.getElementById('type').value; const symInput = document.getElementById('symbol').value.trim(); const qty = parseFloat(document.getElementById('quantity').value); const inv = parseFloat(document.getElementById('invested').value); const curr = document.getElementById('devise').value; if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.'); const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase(); portfolio.push({ type, sym, qty, inv, curr }); localStorage.setItem('portfolio', JSON.stringify(portfolio)); await refreshAll(); }
 
-async function addAsset() {
-  const type = document.getElementById('type').value;
-  const symInput = document.getElementById('symbol').value.trim();
-  const qty = parseFloat(document.getElementById('quantity').value);
-  const inv = parseFloat(document.getElementById('invested').value);
-  const curr = document.getElementById('devise').value;
-  if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-  const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
-  portfolio.push({ type, sym, qty, inv, curr });
-  localStorage.setItem('portfolio', JSON.stringify(portfolio));
-  await refreshAll();
-}
+async function refreshAll() { const tbodyA = document.getElementById("tableAction"); const tbodyC = document.getElementById("tableCrypto"); const advice = document.getElementById("adviceList"); const perf = document.getElementById("globalPerf"); tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = ""; let inv = 0, val = 0;
 
-async function refreshAll() {
-  const tbodyA = document.getElementById("tableAction");
-  const tbodyC = document.getElementById("tableCrypto");
-  const advice = document.getElementById("adviceList");
-  const perf = document.getElementById("globalPerf");
-  tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = "";
-  let inv = 0, val = 0;
+for (let a of portfolio) { const info = a.type === 'crypto' ? await fetchCrypto(a.sym) : await fetchAction(a.sym); if (!info) { const row = <tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>; (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row; continue; } const value = info.price * a.qty; const gain = value - a.inv; const change = info.change.toFixed(2); const gainClass = gain >= 0 ? 'gain' : 'perte'; inv += a.inv; val += value; const row = <tr> <td>${a.sym.toUpperCase()}</td> <td>${a.qty}</td> <td>${a.inv.toFixed(2)}</td> <td>${info.price.toFixed(2)}</td> <td>${value.toFixed(2)}</td> <td class="${gainClass}">${change}%</td> <td>${info.currency}</td> </tr>; (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row; advice.innerHTML += <li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>; } const totalGain = val - inv; const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0; perf.textContent = Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%); perf.style.color = totalGain >= 0 ? 'green' : 'red'; fetchOpportunities(); }
 
-  for (let a of portfolio) {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym) : await fetchAction(a.sym);
-    if (!info) {
-      const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
-      (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
-      continue;
-    }
-    const value = info.price * a.qty;
-    const gain = value - a.inv;
-    const change = info.change.toFixed(2);
-    const gainClass = gain >= 0 ? 'gain' : 'perte';
-    inv += a.inv;
-    val += value;
-    const row = `<tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${gainClass}">${change}%</td><td>${info.currency}</td></tr>`;
-    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
-    advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
-  }
-  const totalGain = val - inv;
-  const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
-  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color = totalGain >= 0 ? 'green' : 'red';
-  fetchOpportunities();
-}
+async function fetchOpportunities() { const ul = document.getElementById("opportunities"); ul.innerHTML = ''; try { const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1"); const data = await res.json(); data.forEach(c => { ul.innerHTML += <li>${c.name} (${c.symbol.toUpperCase()}) : +${c.price_change_percentage_24h.toFixed(2)}%</li>; }); } catch { ul.innerHTML = '<li>Erreur de récupération</li>'; } }
 
-async function fetchOpportunities() {
-  const ul = document.getElementById("opportunities");
-  ul.innerHTML = '';
-  try {
-    const res = await fetch("https://api.coincap.io/v2/assets?limit=20");
-    const data = await res.json();
-    const top = data.data.filter(c => parseFloat(c.changePercent24Hr) > 5).slice(0, 5);
-    top.forEach(c => {
-      ul.innerHTML += `<li>${c.name} (${c.symbol}) : +${parseFloat(c.changePercent24Hr).toFixed(2)}%</li>`;
-    });
-  } catch {
-    ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
-  }
-}
+window.onload = () => { refreshAll(); setInterval(refreshAll, 5 * 60 * 1000); }; </script>
 
-window.onload = () => {
-  refreshAll();
-  setInterval(refreshAll, 5 * 60 * 1000);
-};
-</script></body>
+</body>
 </html>
