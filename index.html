@@ -201,7 +201,7 @@ function removeAsset() {
 }
 async function addAsset() {
   const type = document.getElementById('type').value;
-  const symInput = document.getElementById('symbol').value.trim();
+  const symInput = document.getElementById('symbol').value.trim().toLowerCase();
   const qty = parseFloat(document.getElementById('quantity').value);
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value;
@@ -210,16 +210,20 @@ async function addAsset() {
     alert('Tous les champs sont requis.');
     return;
   }
-  // Format correct du symbole
+
   let sym = type === 'crypto' ? normalizeCryptoSymbol(symInput) : symInput.toUpperCase();
 
-  // Ajout au portefeuille
+  // Test si la crypto est reconnue (prix dispo)
+  if (type === 'crypto') {
+    const testData = await fetchCrypto(sym);
+    if (!testData) {
+      alert("Crypto non reconnue ou données indisponibles.");
+      return;
+    }
+  }
+
   portfolio.push({ type, sym, qty, inv, curr });
-
-  // Sauvegarde locale
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
-
-  // Mise à jour immédiate
   await refreshAll();
 }
     function normalizeCryptoSymbol(sym) {
