@@ -97,7 +97,7 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 // Forcer tous les actifs dans le portefeuille
-let portfolio = [
+    let portfolio = JSON.parse(localStorage.getItem('portfolio')) || [
   // Actions
   { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, curr: 'usd' },
   { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
@@ -116,6 +116,7 @@ let portfolio = [
   { type: 'crypto', sym: 'avalanche-2', qty: 1.7365, inv: 50.00, curr: 'cad' },
   { type: 'crypto', sym: 'pepe', qty: 2.89275, inv: 30.00, curr: 'cad' }
 ];
+
 async function fetchCrypto(sym) {
   const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
   try {
