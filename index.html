@@ -103,7 +103,7 @@
   <ul id="adviceList"></ul>
 
   <script>
-    const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 
 let portfolio = localStorage.getItem('portfolio')
   ? JSON.parse(localStorage.getItem('portfolio'))
@@ -123,23 +123,31 @@ let portfolio = localStorage.getItem('portfolio')
     ];
 
 async function fetchCrypto(sym) {
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
-  try {
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data[sym] && data[sym].cad !== undefined) {
-      return {
-        price: data[sym].cad,
-        change: data[sym].cad_24h_change || 0
-      };
-    } else {
-      console.warn(`CoinGecko indisponible pour ${sym}, tentative avec Coinpaprika...`);
-      return await fetchFromCoinpaprika(sym);
+  const tryCurrency = async (currency) => {
+    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=${currency}&include_24hr_change=true`;
+    try {
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data[sym] && data[sym][currency] !== undefined) {
+        return {
+          price: data[sym][currency],
+          change: data[sym][`${currency}_24h_change`] || 0,
+          currency
+        };
+      }
+    } catch (err) {
+      console.warn(`Erreur CoinGecko (${currency}) pour ${sym}`, err);
     }
-  } catch (err) {
-    console.error("Erreur CoinGecko pour", sym, err);
-    return await fetchFromCoinpaprika(sym);
-  }
+    return null;
+  };
+
+  const fromGecko = await tryCurrency("cad") || await tryCurrency("usd");
+  if (fromGecko) return fromGecko;
+
+  const fromPaprika = await fetchFromCoinpaprika(sym);
+  if (fromPaprika) return { ...fromPaprika, currency: 'CAD' };
+
+  return null;
 }
 
 async function fetchFromCoinpaprika(sym) {
@@ -177,7 +185,8 @@ async function fetchAction(sym) {
     const change = ((data.c - data.pc) / data.pc) * 100;
     return {
       price: data.c,
-      change
+      change,
+      currency: 'USD'
     };
   } catch {
     return null;
@@ -230,6 +239,7 @@ async function addAsset() {
       continue;
     }
 
+    const cur = info.currency ? info.currency.toUpperCase() : a.curr.toUpperCase();
     const value = info.price * a.qty;
     const gain = value - a.inv;
     const change = info.change.toFixed(2);
@@ -238,7 +248,16 @@ async function addAsset() {
     inv += a.inv;
     val += value;
 
-    const row = `<tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${gainClass}">${change}%</td><td>${a.curr.toUpperCase()}</td></tr>`;
+    const row = `<tr>
+      <td>${a.sym.toUpperCase()}</td>
+      <td>${a.qty}</td>
+      <td>${a.inv.toFixed(2)}</td>
+      <td>${info.price.toFixed(2)}</td>
+      <td>${value.toFixed(2)}</td>
+      <td class="${gainClass}">${change}%</td>
+      <td>${cur}</td>
+    </tr>`;
+
     if (a.type === 'crypto') tbodyC.innerHTML += row;
     else tbodyA.innerHTML += row;
 
@@ -268,6 +287,6 @@ async function fetchOpportunities() {
 }
 
 window.onload = refreshAll;
-  </script>
+</script>
 </body>
 </html>
