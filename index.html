@@ -80,11 +80,7 @@
   </table>  <h2>Opportunités du moment</h2>
   <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
   <ul id="adviceList"></ul><script>
-  const ALPHA_KEY = 'W9V75CXC1GIZ3HFX';
-
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
+  const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 
   let portfolio = JSON.parse(localStorage.getItem('portfolio')) || [
     { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, curr: 'usd' },
@@ -119,15 +115,15 @@
   }
 
   async function fetchAction(sym) {
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${sym}&apikey=${ALPHA_KEY}`;
+    const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
     try {
       const res = await fetch(url);
       const data = await res.json();
-      const g = data["Global Quote"];
-      if (!g || !g["05. price"]) return null;
+      if (!data.c || data.c === 0) return null;
+      const change = ((data.c - data.pc) / data.pc) * 100;
       return {
-        price: parseFloat(g["05. price"]),
-        change: parseFloat(g["10. change percent"])
+        price: data.c,
+        change
       };
     } catch {
       return null;
@@ -147,8 +143,6 @@
     let inv = 0, val = 0;
 
     for (let a of portfolio) {
-      if (a.type === 'action') await sleep(15000);
-
       const info = a.type === 'crypto'
         ? await fetchCrypto(a.sym)
         : await fetchAction(a.sym.toUpperCase());
@@ -225,4 +219,5 @@
   }
 
   window.onload = refreshAll;
-</script></html>
+</script></body>
+</html>
