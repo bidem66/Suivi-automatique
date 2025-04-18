@@ -150,8 +150,11 @@ let portfolio = [
       const info = a.type === 'crypto'
         ? await fetchCrypto(a.sym)
         : await fetchAction(a.sym.toUpperCase());
-
-      if (!info) continue;
+      console.log("Chargement:", a.sym, "→", info);
+      if (!info) {
+  console.warn("Échec de chargement pour :", a.sym);
+  continue;
+}
 
       const value = info.price * a.qty;
       const gain = value - a.inv;
