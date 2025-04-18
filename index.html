@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="fr">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -54,7 +55,7 @@
       <option value="crypto">Crypto</option>
       <option value="action">Action</option>
     </select>
-    <input id="symbol" placeholder="Symbole (ex: bitcoin, AAPL)" />
+    <input id="symbol" placeholder="Symbole (ex: BTC, AAPL)" />
     <input id="quantity" type="number" placeholder="Quantité" />
     <input id="invested" type="number" placeholder="Investi" />
     <select id="devise">
@@ -62,162 +63,181 @@
       <option value="usd">USD</option>
     </select>
     <button onclick="addAsset()">Ajouter</button>
-    <input id="removeSymbol" placeholder="Symbole à supprimer (ex: BTC ou AAPL)" />
+    <input id="removeSymbol" placeholder="Symbole à supprimer" />
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>  <div id="globalPerf"></div>  <h2>Actions</h2>
+  </div>
+
+  <div id="globalPerf"></div>
+
+  <h2>Actions</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableAction"></tbody>
-  </table>  <h2>Cryptos</h2>
+  </table>
+
+  <h2>Cryptos</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
-  </table>  <h2>Opportunités du moment</h2>
-  <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul><script>
-  const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+  </table>
 
-  let portfolio = JSON.parse(localStorage.getItem('portfolio')) || [
-    { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, curr: 'usd' },
-    { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
-    { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, curr: 'usd' },
-    { type: 'action', sym: 'CRM', qty: 0.2271, inv: 57.97, curr: 'usd' },
-    { type: 'action', sym: 'GLD', qty: 0.2022, inv: 59.99, curr: 'usd' },
-    { type: 'action', sym: 'SLV', qty: 1.0, inv: 29.45, curr: 'usd' },
-    { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, curr: 'cad' },
-    { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, curr: 'cad' },
-    { type: 'crypto', sym: 'solana', qty: 0.988, inv: 180.00, curr: 'cad' },
-    { type: 'crypto', sym: 'chainlink', qty: 4.9401, inv: 90.00, curr: 'cad' },
-    { type: 'crypto', sym: 'cardano', qty: 89.6204, inv: 80.00, curr: 'cad' },
-    { type: 'crypto', sym: 'polkadot', qty: 13.3732, inv: 70.00, curr: 'cad' },
-    { type: 'crypto', sym: 'avalanche-2', qty: 1.7365, inv: 50.00, curr: 'cad' },
-    { type: 'crypto', sym: 'pepe', qty: 2.89275, inv: 30.00, curr: 'cad' }
-  ];
+  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>
 
-  async function fetchCrypto(sym) {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!data[sym]) return null;
-      return {
-        price: data[sym].cad,
-        change: data[sym].cad_24h_change
-      };
-    } catch {
-      return null;
-    }
+  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul>
+  <script>
+const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+
+let portfolio = JSON.parse(localStorage.getItem('portfolio')) || [
+  { type: 'action', sym: 'AAPL', qty: 1.2, inv: 300, curr: 'usd' },
+  { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
+  { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, curr: 'usd' },
+  { type: 'crypto', sym: 'bitcoin', qty: 0.02, inv: 800, curr: 'cad' },
+  { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, curr: 'cad' },
+  { type: 'crypto', sym: 'solana', qty: 0.988, inv: 180.00, curr: 'cad' },
+  { type: 'crypto', sym: 'cardano', qty: 89.62, inv: 80.00, curr: 'cad' }
+];
+
+async function fetchCrypto(sym) {
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad&include_24hr_change=true`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data[sym]) return null;
+    return {
+      price: data[sym].cad,
+      change: data[sym].cad_24h_change
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchAction(sym) {
+  const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.c || data.c === 0) return null;
+    const change = ((data.c - data.pc) / data.pc) * 100;
+    return {
+      price: data.c,
+      change
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getCoinGeckoIdFromSymbol(symbol) {
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/list");
+    const data = await res.json();
+    const match = data.find(c => c.symbol.toLowerCase() === symbol.toLowerCase());
+    return match ? match.id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function addAsset() {
+  const type = document.getElementById('type').value;
+  const symInput = document.getElementById('symbol').value.trim();
+  const qty = parseFloat(document.getElementById('quantity').value);
+  const inv = parseFloat(document.getElementById('invested').value);
+  const curr = document.getElementById('devise').value;
+
+  if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
+
+  let sym = symInput;
+  if (type === 'crypto') {
+    const id = await getCoinGeckoIdFromSymbol(symInput);
+    if (!id) return alert("Crypto non reconnue.");
+    sym = id;
+  } else {
+    sym = symInput.toUpperCase();
   }
 
-  async function fetchAction(sym) {
-    const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (!data.c || data.c === 0) return null;
-      const change = ((data.c - data.pc) / data.pc) * 100;
-      return {
-        price: data.c,
-        change
-      };
-    } catch {
-      return null;
-    }
-  }
+  portfolio.push({ type, sym, qty, inv, curr });
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  refreshAll();
+}
 
-  async function refreshAll() {
-    const tbodyA = document.getElementById("tableAction");
-    const tbodyC = document.getElementById("tableCrypto");
-    const advice = document.getElementById("adviceList");
-    const perf = document.getElementById("globalPerf");
+function removeAsset() {
+  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
+  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  refreshAll();
+}
 
-    tbodyA.innerHTML = "";
-    tbodyC.innerHTML = "";
-    advice.innerHTML = "";
+async function refreshAll() {
+  const tbodyA = document.getElementById("tableAction");
+  const tbodyC = document.getElementById("tableCrypto");
+  const advice = document.getElementById("adviceList");
+  const perf = document.getElementById("globalPerf");
 
-    let inv = 0, val = 0;
+  tbodyA.innerHTML = "";
+  tbodyC.innerHTML = "";
+  advice.innerHTML = "";
 
-    for (let a of portfolio) {
-      const info = a.type === 'crypto'
-        ? await fetchCrypto(a.sym)
-        : await fetchAction(a.sym.toUpperCase());
+  let inv = 0, val = 0;
 
-      if (!info) {
-        const row = `<tr>
-          <td>${a.sym.toUpperCase()}</td>
-          <td>${a.qty}</td>
-          <td>${a.inv.toFixed(2)}</td>
-          <td colspan="4" style="color:red">Données indisponibles</td>
-        </tr>`;
-        if (a.type === 'crypto') tbodyC.innerHTML += row;
-        else tbodyA.innerHTML += row;
-        continue;
-      }
+  for (let a of portfolio) {
+    const info = a.type === 'crypto'
+      ? await fetchCrypto(a.sym)
+      : await fetchAction(a.sym);
 
-      const value = info.price * a.qty;
-      const gain = value - a.inv;
-      const change = info.change.toFixed(2);
-      const gainClass = gain >= 0 ? 'gain' : 'perte';
-
-      inv += a.inv;
-      val += value;
-
-      const row = `<tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${gainClass}">${change}%</td><td>${a.curr.toUpperCase()}</td></tr>`;
+    if (!info) {
+      const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
       if (a.type === 'crypto') tbodyC.innerHTML += row;
       else tbodyA.innerHTML += row;
-
-      advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
+      continue;
     }
 
-    const totalGain = val - inv;
-    const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
-    perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-    perf.style.color = totalGain >= 0 ? 'green' : 'red';
+    const value = info.price * a.qty;
+    const gain = value - a.inv;
+    const change = info.change.toFixed(2);
+    const gainClass = gain >= 0 ? 'gain' : 'perte';
 
-    fetchOpportunities();
+    inv += a.inv;
+    val += value;
+
+    const row = `<tr><td>${a.sym.toUpperCase()}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${gainClass}">${change}%</td><td>${a.curr.toUpperCase()}</td></tr>`;
+    if (a.type === 'crypto') tbodyC.innerHTML += row;
+    else tbodyA.innerHTML += row;
+
+    advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
   }
 
-  async function fetchOpportunities() {
-    const ul = document.getElementById("opportunities");
-    ul.innerHTML = '';
-    try {
-      const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1");
-      const data = await res.json();
-      data.forEach(c => {
-        ul.innerHTML += `<li>${c.name} (${c.symbol.toUpperCase()}) : +${c.price_change_percentage_24h.toFixed(2)}%</li>`;
-      });
-    } catch {
-      ul.innerHTML = '<li>Erreur de récupération</li>';
-    }
+  const totalGain = val - inv;
+  const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
+  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
+
+  fetchOpportunities();
+}
+
+async function fetchOpportunities() {
+  const ul = document.getElementById("opportunities");
+  ul.innerHTML = '';
+  try {
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1");
+    const data = await res.json();
+    data.forEach(c => {
+      ul.innerHTML += `<li>${c.name} (${c.symbol.toUpperCase()}) : +${c.price_change_percentage_24h.toFixed(2)}%</li>`;
+    });
+  } catch {
+    ul.innerHTML = '<li>Erreur de récupération</li>';
   }
+}
 
-  function addAsset() {
-    const type = document.getElementById('type').value;
-    const symInput = document.getElementById('symbol').value.trim();
-    const qty = parseFloat(document.getElementById('quantity').value);
-    const inv = parseFloat(document.getElementById('invested').value);
-    const curr = document.getElementById('devise').value;
-
-    if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-
-    const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
-    portfolio.push({ type, sym, qty, inv, curr });
-    localStorage.setItem('portfolio', JSON.stringify(portfolio));
-    refreshAll();
-  }
-
-  function removeAsset() {
-    const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
-    portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
-    localStorage.setItem('portfolio', JSON.stringify(portfolio));
-    refreshAll();
-  }
-
-  window.onload = refreshAll;
-</script></body>
+window.onload = refreshAll;
+  </script>
+  </body>
 </html>
