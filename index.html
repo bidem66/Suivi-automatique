@@ -199,7 +199,6 @@ function removeAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   refreshAll();
 }
-
 async function addAsset() {
   const type = document.getElementById('type').value;
   const symInput = document.getElementById('symbol').value.trim();
@@ -207,13 +206,21 @@ async function addAsset() {
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value;
 
-  if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-
+  if (!symInput || !qty || !inv) {
+    alert('Tous les champs sont requis.');
+    return;
+  }
+  // Format correct du symbole
   let sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
 
+  // Ajout au portefeuille
   portfolio.push({ type, sym, qty, inv, curr });
+
+  // Sauvegarde locale
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
-  refreshAll();
+
+  // Mise à jour immédiate
+  await refreshAll();
 }
     async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
