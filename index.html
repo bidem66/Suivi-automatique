@@ -149,33 +149,106 @@ async function fetchCrypto(sym) {
 
   return null;
 }
+    const COIN_ID_MAP = {
+  btc: 'bitcoin',
+  eth: 'ethereum',
+  sol: 'solana',
+  ada: 'cardano',
+  avax: 'avalanche-2',
+  link: 'chainlink',
+  dot: 'polkadot',
+  pepe: 'pepe',
+  doge: 'dogecoin',
+  shib: 'shiba-inu',
+  ltc: 'litecoin',
+  bnb: 'binancecoin',
+  xrp: 'ripple',
+  matic: 'matic-network',
+  uni: 'uniswap',
+  egld: 'elrond-erd-2',
+  atom: 'cosmos',
+  ftm: 'fantom',
+  near: 'near',
+  render: 'render-token',
+  aave: 'aave',
+  sushi: 'sushi',
+  sand: 'the-sandbox',
+  mana: 'decentraland',
+  gala: 'gala',
+  op: 'optimism',
+  arb: 'arbitrum',
+  comp: 'compound-governance-token',
+  inj: 'injective-protocol',
+  dodo: 'dodo',
+  ldo: 'lido-dao',
+  ape: 'apecoin',
+  dydx: 'dydx',
+  gas: 'neo-gas',
+  vet: 'vechain',
+  zil: 'zilliqa',
+  enj: 'enjincoin',
+  chz: 'chiliz',
+  one: 'harmony',
+  xlm: 'stellar',
+  qtum: 'qtum',
+  cro: 'crypto-com-chain',
+  rose: 'oasis-network',
+  mina: 'mina-protocol',
+  blur: 'blur',
+  axs: 'axie-infinity',
+  flow: 'flow',
+  rune: 'thorchain',
+  srm: 'serum',
+  celo: 'celo',
+  kava: 'kava',
+  stx: 'stacks',
+  kas: 'kaspa',
+  arb: 'arbitrum',
+  algo: 'algorand'
+};
+async function fetchCrypto(sym) {
+  const id = COIN_ID_MAP[sym.toLowerCase()] || sym.toLowerCase();
+  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=cad&include_24hr_change=true`;
 
-async function fetchFromCoinpaprika(sym) {
-  const map = {
-    'bitcoin': 'btc-bitcoin',
-    'ethereum': 'eth-ethereum',
-    'solana': 'sol-solana',
-    'cardano': 'ada-cardano',
-    'chainlink': 'link-chainlink',
-    'polkadot': 'dot-polkadot',
-    'avalanche-2': 'avax-avalanche',
-    'pepe': 'pepe-pepe'
-  };
-  const id = map[sym];
-  if (!id) return null;
   try {
-    const res = await fetch(`https://api.coinpaprika.com/v1/tickers/${id}`);
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data[id] && data[id].cad !== undefined) {
+      return {
+        price: data[id].cad,
+        change: data[id].cad_24h_change || 0,
+        currency: 'CAD'
+      };
+    }
+  } catch (err) {
+    console.warn("CoinGecko error", err);
+  }
+
+  // fallback with CoinPaprika
+  const paprikaMap = {
+    bitcoin: 'btc-bitcoin',
+    ethereum: 'eth-ethereum',
+    solana: 'sol-solana',
+    cardano: 'ada-cardano',
+    avalanche: 'avax-avalanche',
+    pepe: 'pepe-pepe'
+  };
+
+  const pid = paprikaMap[id];
+  if (!pid) return null;
+
+  try {
+    const res = await fetch(`https://api.coinpaprika.com/v1/tickers/${pid}`);
     const data = await res.json();
     return {
       price: data.quotes.CAD.price,
-      change: data.quotes.CAD.percent_change_24h
+      change: data.quotes.CAD.percent_change_24h || 0,
+      currency: 'CAD'
     };
   } catch {
-    console.warn("Données indisponibles sur Coinpaprika pour", sym);
     return null;
   }
 }
-
 async function fetchAction(sym) {
   const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
   try {
