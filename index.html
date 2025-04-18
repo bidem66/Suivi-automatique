@@ -199,9 +199,9 @@ function removeAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   refreshAll();
 }
-async function addAsset() {
+    async function addAsset() {
   const type = document.getElementById('type').value;
-  const symInput = document.getElementById('symbol').value.trim().toLowerCase();
+  const symInput = document.getElementById('symbol').value.trim();
   const qty = parseFloat(document.getElementById('quantity').value);
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value;
@@ -211,37 +211,23 @@ async function addAsset() {
     return;
   }
 
-  let sym = type === 'crypto' ? normalizeCryptoSymbol(symInput) : symInput.toUpperCase();
+  let sym = symInput;
 
-  // Test si la crypto est reconnue (prix dispo)
   if (type === 'crypto') {
-    const testData = await fetchCrypto(sym);
-    if (!testData) {
-      alert("Crypto non reconnue ou données indisponibles.");
+    const id = await getCoinGeckoIdFromSymbol(symInput);
+    if (!id) {
+      alert("Crypto non reconnue (CoinGecko).");
       return;
     }
+    sym = id; // ex: solana
+  } else {
+    sym = sym.toUpperCase();
   }
 
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
-    function normalizeCryptoSymbol(sym) {
-  const map = {
-    btc: 'bitcoin',
-    eth: 'ethereum',
-    pepe: 'pepe',
-    sol: 'solana',
-    link: 'chainlink',
-    ada: 'cardano',
-    dot: 'polkadot',
-    avax: 'avalanche-2',
-    ltc: 'litecoin',
-    doge: 'dogecoin',
-    xrp: 'ripple'
-  };
-  return map[sym.toLowerCase()] || sym.toLowerCase();
-    }
     async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
