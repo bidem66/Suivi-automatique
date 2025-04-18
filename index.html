@@ -211,7 +211,7 @@ async function addAsset() {
     return;
   }
   // Format correct du symbole
-  let sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
+  let sym = type === 'crypto' ? normalizeCryptoSymbol(symInput) : symInput.toUpperCase();
 
   // Ajout au portefeuille
   portfolio.push({ type, sym, qty, inv, curr });
@@ -222,6 +222,22 @@ async function addAsset() {
   // Mise à jour immédiate
   await refreshAll();
 }
+    function normalizeCryptoSymbol(sym) {
+  const map = {
+    btc: 'bitcoin',
+    eth: 'ethereum',
+    pepe: 'pepe',
+    sol: 'solana',
+    link: 'chainlink',
+    ada: 'cardano',
+    dot: 'polkadot',
+    avax: 'avalanche-2',
+    ltc: 'litecoin',
+    doge: 'dogecoin',
+    xrp: 'ripple'
+  };
+  return map[sym.toLowerCase()] || sym.toLowerCase();
+    }
     async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
