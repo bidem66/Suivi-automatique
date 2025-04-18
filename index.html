@@ -199,6 +199,71 @@ function removeAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   refreshAll();
 }
+    async function getCoinGeckoIdFromSymbol(symbol) {
+  try {
+    const res = await fetch('https://api.coingecko.com/api/v3/coins/list');
+    const data = await res.json();
+    const matches = data.filter(coin => coin.symbol.toLowerCase() === symbol.toLowerCase());
+
+    if (matches.length === 0) return null;
+      const forced = {
+  btc: 'bitcoin',
+  eth: 'ethereum',
+  sol: 'solana',
+  ada: 'cardano',
+  avax: 'avalanche-2',
+  link: 'chainlink',
+  dot: 'polkadot',
+  doge: 'dogecoin',
+  matic: 'matic-network',
+  ltc: 'litecoin',
+  bnb: 'binancecoin',
+  xrp: 'ripple',
+  pepe: 'pepe',
+  shib: 'shiba-inu',
+  uni: 'uniswap',
+  egld: 'elrond-erd-2',
+  atom: 'cosmos',
+  ftm: 'fantom',
+  near: 'near',
+  render: 'render-token',
+  aave: 'aave',
+  sushi: 'sushi',
+  sand: 'the-sandbox',
+  mana: 'decentraland',
+  gala: 'gala',
+  op: 'optimism',
+  arb: 'arbitrum',
+  comp: 'compound-governance-token',
+  inj: 'injective-protocol',
+  dodo: 'dodo',
+  ldo: 'lido-dao',
+  ape: 'apecoin',
+  dydx: 'dydx',
+  zk: 'zkfair',
+  gas: 'neo-gas',
+  vet: 'vechain',
+  zil: 'zilliqa',
+  enj: 'enjincoin',
+  chz: 'chiliz',
+  one: 'harmony',
+  xlm: 'stellar',
+  qtum: 'qtum',
+  cro: 'crypto-com-chain',
+  rose: 'oasis-network',
+  mina: 'mina-protocol'
+};
+    };
+
+    const forcedId = forced[symbol.toLowerCase()];
+    if (forcedId) return forcedId;
+
+    return matches[0].id;
+  } catch (err) {
+    console.error("Erreur CoinGecko :", err);
+    return null;
+  }
+    }
     async function addAsset() {
   const type = document.getElementById('type').value;
   const symInput = document.getElementById('symbol').value.trim();
@@ -219,15 +284,16 @@ function removeAsset() {
       alert("Crypto non reconnue (CoinGecko).");
       return;
     }
-    sym = id; // ex: solana
+    sym = id;
   } else {
-    sym = sym.toUpperCase();
+    sym = symInput.toUpperCase();
   }
 
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  console.log(`Ajouté : ${type.toUpperCase()} → ${sym}`);
   await refreshAll();
-}
+    }
     async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
