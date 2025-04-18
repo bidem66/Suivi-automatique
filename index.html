@@ -173,10 +173,16 @@ async function fetchAction(sym) {
         : await fetchAction(a.sym.toUpperCase());
       console.log("Chargement:", a.sym, "→", info);
       if (!info) {
-  console.warn("Échec de chargement pour :", a.sym);
+  const row = `<tr>
+    <td>${a.sym.toUpperCase()}</td>
+    <td>${a.qty}</td>
+    <td>${a.inv.toFixed(2)}</td>
+    <td colspan="4" style="color:red">Données indisponibles</td>
+  </tr>`;
+  if (a.type === 'crypto') tbodyC.innerHTML += row;
+  else tbodyA.innerHTML += row;
   continue;
-}
-
+      }
       const value = info.price * a.qty;
       const gain = value - a.inv;
       const change = info.change.toFixed(2);
