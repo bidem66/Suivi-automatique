@@ -237,6 +237,7 @@ async function fetchAction(sym) {
 
     const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
     portfolio.push({ type, sym, qty, inv, curr });
+    localStorage.setItem('portfolio', JSON.stringify(portfolio));
     refreshAll();
   }
 
@@ -244,6 +245,7 @@ async function fetchAction(sym) {
     const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
     const lenBefore = portfolio.length;
     portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
+    localStorage.setItem('portfolio', JSON.stringify(portfolio));
     if (portfolio.length === lenBefore) {
       alert('Aucun actif trouvé pour ce symbole.');
     } else {
