@@ -14,7 +14,9 @@
       flex-direction: column;
       align-items: center;
     }
-    h1, h2 { text-align: center; }
+    h1, h2 {
+      text-align: center;
+    }
     .controls, table {
       max-width: 1000px;
       width: 100%;
@@ -33,28 +35,26 @@
     table {
       border-collapse: collapse;
       background: #fff;
-    }
-    th, td {
-      border: 1px solid #ccc;
-      padding: 10px;
-      text-align: center;
-    }
-    th { background: #eee; }
-    .gain { color: green; }
-    .perte { color: red; }
-    #globalPerf {
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
-    html {
-      zoom: 0.75;
-    }
-    table {
       font-size: 0.75rem;
       zoom: 0.75;
     }
     th, td {
+      border: 1px solid #ccc;
       padding: 4px;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+    .gain {
+      color: green;
+    }
+    .perte {
+      color: red;
+    }
+    #globalPerf {
+      font-weight: bold;
+      margin-bottom: 10px;
     }
   </style>
 </head>
@@ -101,7 +101,6 @@
 
   <h2>Conseils personnalisés</h2>
   <ul id="adviceList"></ul>
-
   <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 
@@ -114,141 +113,30 @@ let portfolio = localStorage.getItem('portfolio')
       { type: 'action', sym: 'CRM', qty: 0.2271, inv: 57.97, curr: 'usd' },
       { type: 'action', sym: 'GLD', qty: 0.2022, inv: 59.99, curr: 'usd' },
       { type: 'action', sym: 'SLV', qty: 1.0, inv: 29.45, curr: 'usd' },
-      { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, curr: 'cad' },
-      { type: 'crypto', sym: 'solana', qty: 0.988, inv: 180, curr: 'cad' },
-      { type: 'crypto', sym: 'chainlink', qty: 4.9401, inv: 90, curr: 'cad' },
-      { type: 'crypto', sym: 'polkadot', qty: 13.3732, inv: 70, curr: 'cad' },
-      { type: 'crypto', sym: 'avalanche-2', qty: 1.7365, inv: 50, curr: 'cad' },
-      { type: 'crypto', sym: 'pepe', qty: 2.89275, inv: 30, curr: 'cad' }
+      { type: 'crypto', sym: 'bitcoin', qty: 0.005, inv: 300, curr: 'cad' },
+      { type: 'crypto', sym: 'solana', qty: 1.2, inv: 160, curr: 'cad' },
+      { type: 'crypto', sym: 'cardano', qty: 100, inv: 60, curr: 'cad' },
+      { type: 'crypto', sym: 'avalanche-2', qty: 2.3, inv: 90, curr: 'cad' },
+      { type: 'crypto', sym: 'chainlink', qty: 4.1, inv: 85, curr: 'cad' },
+      { type: 'crypto', sym: 'polkadot', qty: 7.7, inv: 75, curr: 'cad' },
+      { type: 'crypto', sym: 'pepe', qty: 1000000, inv: 30, curr: 'cad' }
     ];
 
 async function fetchCrypto(sym) {
-  const tryCurrency = async (currency) => {
-    const url = `https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=${currency}&include_24hr_change=true`;
-    try {
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data[sym] && data[sym][currency] !== undefined) {
-        return {
-          price: data[sym][currency],
-          change: data[sym][`${currency}_24h_change`] || 0,
-          currency
-        };
-      }
-    } catch (err) {
-      console.warn(`Erreur CoinGecko (${currency}) pour ${sym}`, err);
-    }
-    return null;
-  };
-
-  const fromGecko = await tryCurrency("cad") || await tryCurrency("usd");
-  if (fromGecko) return fromGecko;
-
-  const fromPaprika = await fetchFromCoinpaprika(sym);
-  if (fromPaprika) return { ...fromPaprika, currency: 'CAD' };
-
-  return null;
-}
-    const COIN_ID_MAP = {
-  btc: 'bitcoin',
-  eth: 'ethereum',
-  sol: 'solana',
-  ada: 'cardano',
-  avax: 'avalanche-2',
-  link: 'chainlink',
-  dot: 'polkadot',
-  pepe: 'pepe',
-  doge: 'dogecoin',
-  shib: 'shiba-inu',
-  ltc: 'litecoin',
-  bnb: 'binancecoin',
-  xrp: 'ripple',
-  matic: 'matic-network',
-  uni: 'uniswap',
-  egld: 'elrond-erd-2',
-  atom: 'cosmos',
-  ftm: 'fantom',
-  near: 'near',
-  render: 'render-token',
-  aave: 'aave',
-  sushi: 'sushi',
-  sand: 'the-sandbox',
-  mana: 'decentraland',
-  gala: 'gala',
-  op: 'optimism',
-  arb: 'arbitrum',
-  comp: 'compound-governance-token',
-  inj: 'injective-protocol',
-  dodo: 'dodo',
-  ldo: 'lido-dao',
-  ape: 'apecoin',
-  dydx: 'dydx',
-  gas: 'neo-gas',
-  vet: 'vechain',
-  zil: 'zilliqa',
-  enj: 'enjincoin',
-  chz: 'chiliz',
-  one: 'harmony',
-  xlm: 'stellar',
-  qtum: 'qtum',
-  cro: 'crypto-com-chain',
-  rose: 'oasis-network',
-  mina: 'mina-protocol',
-  blur: 'blur',
-  axs: 'axie-infinity',
-  flow: 'flow',
-  rune: 'thorchain',
-  srm: 'serum',
-  celo: 'celo',
-  kava: 'kava',
-  stx: 'stacks',
-  kas: 'kaspa',
-  arb: 'arbitrum',
-  algo: 'algorand'
-};
-async function fetchCrypto(sym) {
-  const id = COIN_ID_MAP[sym.toLowerCase()] || sym.toLowerCase();
-  const url = `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=cad&include_24hr_change=true`;
-
   try {
-    const res = await fetch(url);
+    const res = await fetch(`https://api.coincap.io/v2/assets/${sym}`);
     const data = await res.json();
-    if (data[id] && data[id].cad !== undefined) {
-      return {
-        price: data[id].cad,
-        change: data[id].cad_24h_change || 0,
-        currency: 'CAD'
-      };
-    }
-  } catch (err) {
-    console.warn("CoinGecko error", err);
-  }
-
-  // fallback with CoinPaprika
-  const paprikaMap = {
-    bitcoin: 'btc-bitcoin',
-    ethereum: 'eth-ethereum',
-    solana: 'sol-solana',
-    cardano: 'ada-cardano',
-    avalanche: 'avax-avalanche',
-    pepe: 'pepe-pepe'
-  };
-
-  const pid = paprikaMap[id];
-  if (!pid) return null;
-
-  try {
-    const res = await fetch(`https://api.coinpaprika.com/v1/tickers/${pid}`);
-    const data = await res.json();
+    if (!data || !data.data || !data.data.priceUsd) return null;
     return {
-      price: data.quotes.CAD.price,
-      change: data.quotes.CAD.percent_change_24h || 0,
-      currency: 'CAD'
+      price: parseFloat(data.data.priceUsd),
+      change: parseFloat(data.data.changePercent24Hr),
+      currency: 'USD'
     };
   } catch {
     return null;
   }
 }
+
 async function fetchAction(sym) {
   const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
   try {
@@ -265,41 +153,15 @@ async function fetchAction(sym) {
     return null;
   }
 }
-
+    <script>
 function removeAsset() {
   const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
   portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   refreshAll();
 }
-    async function getCoinGeckoIdFromSymbol(symbol) {
-  const forced = {
-    btc: 'bitcoin', eth: 'ethereum', sol: 'solana', ada: 'cardano', avax: 'avalanche-2',
-    link: 'chainlink', dot: 'polkadot', pepe: 'pepe', doge: 'dogecoin', shib: 'shiba-inu',
-    ltc: 'litecoin', bnb: 'binancecoin', xrp: 'ripple', matic: 'matic-network', uni: 'uniswap',
-    egld: 'elrond-erd-2', atom: 'cosmos', ftm: 'fantom', near: 'near', render: 'render-token',
-    aave: 'aave', sushi: 'sushi', sand: 'the-sandbox', mana: 'decentraland', gala: 'gala',
-    op: 'optimism', arb: 'arbitrum', comp: 'compound-governance-token', inj: 'injective-protocol',
-    dodo: 'dodo', ldo: 'lido-dao', ape: 'apecoin', dydx: 'dydx', gas: 'neo-gas', vet: 'vechain',
-    zil: 'zilliqa', enj: 'enjincoin', chz: 'chiliz', one: 'harmony', xlm: 'stellar',
-    qtum: 'qtum', cro: 'crypto-com-chain', rose: 'oasis-network', mina: 'mina-protocol',
-    axs: 'axie-infinity', flow: 'flow', rune: 'thorchain', srm: 'serum', celo: 'celo',
-    kava: 'kava', stx: 'stacks', kas: 'kaspa', algo: 'algorand'
-  };
-  const key = symbol.toLowerCase();
-  if (forced[key]) return forced[key];
 
-  try {
-    const res = await fetch('https://api.coingecko.com/api/v3/coins/list');
-    const data = await res.json();
-    const match = data.find(coin => coin.symbol.toLowerCase() === key);
-    return match ? match.id : null;
-  } catch (err) {
-    console.error("Erreur de récupération CoinGecko :", err);
-    return null;
-  }
-    }
-    async function addAsset() {
+async function addAsset() {
   const type = document.getElementById('type').value;
   const symInput = document.getElementById('symbol').value.trim();
   const qty = parseFloat(document.getElementById('quantity').value);
@@ -311,25 +173,13 @@ function removeAsset() {
     return;
   }
 
-  let sym = symInput;
-
-  if (type === 'crypto') {
-    const id = await getCoinGeckoIdFromSymbol(symInput);
-    if (!id) {
-      alert("Crypto non reconnue.");
-      return;
-    }
-    sym = id;
-  } else {
-    sym = symInput.toUpperCase();
-  }
-
+  const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
-  console.log(`Ajouté : ${type.toUpperCase()} → ${sym}`);
   await refreshAll();
-    }
-    async function refreshAll() {
+}
+
+async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
   const advice = document.getElementById("adviceList");
@@ -348,12 +198,11 @@ function removeAsset() {
 
     if (!info) {
       const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
-      if (a.type === 'crypto') tbodyC.innerHTML += row;
-      else tbodyA.innerHTML += row;
+      (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
       continue;
     }
 
-    const cur = info.currency ? info.currency.toUpperCase() : a.curr.toUpperCase();
+    const cur = info.currency || a.curr.toUpperCase();
     const value = info.price * a.qty;
     const gain = value - a.inv;
     const change = info.change.toFixed(2);
@@ -369,11 +218,10 @@ function removeAsset() {
       <td>${info.price.toFixed(2)}</td>
       <td>${value.toFixed(2)}</td>
       <td class="${gainClass}">${change}%</td>
-      <td>${cur}</td>
+      <td>${cur.toUpperCase()}</td>
     </tr>`;
 
-    if (a.type === 'crypto') tbodyC.innerHTML += row;
-    else tbodyA.innerHTML += row;
+    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
 
     advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
   }
@@ -385,22 +233,302 @@ function removeAsset() {
 
   fetchOpportunities();
 }
-
+</script>
+<script>
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1");
+    const res = await fetch("https://api.coincap.io/v2/assets?limit=15");
     const data = await res.json();
-    data.forEach(c => {
-      ul.innerHTML += `<li>${c.name} (${c.symbol.toUpperCase()}) : +${c.price_change_percentage_24h.toFixed(2)}%</li>`;
+    const top = data.data
+      .filter(c => parseFloat(c.changePercent24Hr) >= 5)
+      .sort((a, b) => parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr))
+      .slice(0, 5);
+
+    if (top.length === 0) {
+      ul.innerHTML = '<li>Aucune opportunité majeure détectée.</li>';
+      return;
+    }
+
+    top.forEach(c => {
+      ul.innerHTML += `<li>${c.name} (${c.symbol}) : +${parseFloat(c.changePercent24Hr).toFixed(2)}%</li>`;
     });
+  } catch (err) {
+    ul.innerHTML = '<li>Erreur de récupération des opportunités.</li>';
+    console.warn("Erreur CoinCap", err);
+  }
+}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.85" />
+  <title>Dashboard Portefeuille</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f7fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1, h2 {
+      text-align: center;
+    }
+    .controls, table {
+      max-width: 1000px;
+      width: 100%;
+      margin: 20px 0;
+    }
+    .controls input, .controls select, .controls button {
+      padding: 10px;
+      margin: 5px;
+      width: 100%;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    table {
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 0.75rem;
+      zoom: 0.75;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 4px;
+      text-align: center;
+    }
+    th {
+      background: #eee;
+    }
+    .gain {
+      color: green;
+    }
+    .perte {
+      color: red;
+    }
+    #globalPerf {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dashboard Portefeuille</h1>
+  <div class="controls">
+    <select id="type">
+      <option value="crypto">Crypto</option>
+      <option value="action">Action</option>
+    </select>
+    <input id="symbol" placeholder="Symbole (ex: BTC, AAPL)" />
+    <input id="quantity" type="number" placeholder="Quantité" />
+    <input id="invested" type="number" placeholder="Investi" />
+    <select id="devise">
+      <option value="cad">CAD</option>
+      <option value="usd">USD</option>
+    </select>
+    <button onclick="addAsset()">Ajouter</button>
+    <input id="removeSymbol" placeholder="Symbole à supprimer" />
+    <button onclick="removeAsset()">Supprimer</button>
+    <button onclick="refreshAll()">Actualiser maintenant</button>
+  </div>
+
+  <div id="globalPerf"></div>
+
+  <h2>Actions</h2>
+  <table>
+    <thead>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+    </thead>
+    <tbody id="tableAction"></tbody>
+  </table>
+
+  <h2>Cryptos</h2>
+  <table>
+    <thead>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+    </thead>
+    <tbody id="tableCrypto"></tbody>
+  </table>
+
+  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>
+
+  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul>
+  <script>
+const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+
+let portfolio = localStorage.getItem('portfolio')
+  ? JSON.parse(localStorage.getItem('portfolio'))
+  : [
+      { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
+      { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, curr: 'usd' },
+      { type: 'action', sym: 'STLA', qty: 3, inv: 60, curr: 'usd' },
+      { type: 'action', sym: 'CRM', qty: 0.2271, inv: 57.97, curr: 'usd' },
+      { type: 'action', sym: 'GLD', qty: 0.2022, inv: 59.99, curr: 'usd' },
+      { type: 'action', sym: 'SLV', qty: 1.0, inv: 29.45, curr: 'usd' },
+      { type: 'crypto', sym: 'bitcoin', qty: 0.005, inv: 300, curr: 'cad' },
+      { type: 'crypto', sym: 'solana', qty: 1.2, inv: 160, curr: 'cad' },
+      { type: 'crypto', sym: 'cardano', qty: 100, inv: 60, curr: 'cad' },
+      { type: 'crypto', sym: 'avalanche-2', qty: 2.3, inv: 90, curr: 'cad' },
+      { type: 'crypto', sym: 'chainlink', qty: 4.1, inv: 85, curr: 'cad' },
+      { type: 'crypto', sym: 'polkadot', qty: 7.7, inv: 75, curr: 'cad' },
+      { type: 'crypto', sym: 'pepe', qty: 1000000, inv: 30, curr: 'cad' }
+    ];
+
+async function fetchCrypto(sym) {
+  try {
+    const res = await fetch(`https://api.coincap.io/v2/assets/${sym}`);
+    const data = await res.json();
+    if (!data || !data.data || !data.data.priceUsd) return null;
+    return {
+      price: parseFloat(data.data.priceUsd),
+      change: parseFloat(data.data.changePercent24Hr),
+      currency: 'USD'
+    };
   } catch {
-    ul.innerHTML = '<li>Erreur de récupération</li>';
+    return null;
   }
 }
 
-window.onload = refreshAll;
+async function fetchAction(sym) {
+  const url = `https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`;
+  try {
+    const res = await fetch(url);
+    const data = await res.json();
+    if (!data.c || data.c === 0) return null;
+    const change = ((data.c - data.pc) / data.pc) * 100;
+    return {
+      price: data.c,
+      change,
+      currency: 'USD'
+    };
+  } catch {
+    return null;
+  }
+}
+    <script>
+function removeAsset() {
+  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
+  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  refreshAll();
+}
+
+async function addAsset() {
+  const type = document.getElementById('type').value;
+  const symInput = document.getElementById('symbol').value.trim();
+  const qty = parseFloat(document.getElementById('quantity').value);
+  const inv = parseFloat(document.getElementById('invested').value);
+  const curr = document.getElementById('devise').value;
+
+  if (!symInput || !qty || !inv) {
+    alert('Tous les champs sont requis.');
+    return;
+  }
+
+  const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
+  portfolio.push({ type, sym, qty, inv, curr });
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  await refreshAll();
+}
+
+async function refreshAll() {
+  const tbodyA = document.getElementById("tableAction");
+  const tbodyC = document.getElementById("tableCrypto");
+  const advice = document.getElementById("adviceList");
+  const perf = document.getElementById("globalPerf");
+
+  tbodyA.innerHTML = "";
+  tbodyC.innerHTML = "";
+  advice.innerHTML = "";
+
+  let inv = 0, val = 0;
+
+  for (let a of portfolio) {
+    const info = a.type === 'crypto'
+      ? await fetchCrypto(a.sym)
+      : await fetchAction(a.sym);
+
+    if (!info) {
+      const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
+      (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+      continue;
+    }
+
+    const cur = info.currency || a.curr.toUpperCase();
+    const value = info.price * a.qty;
+    const gain = value - a.inv;
+    const change = info.change.toFixed(2);
+    const gainClass = gain >= 0 ? 'gain' : 'perte';
+
+    inv += a.inv;
+    val += value;
+
+    const row = `<tr>
+      <td>${a.sym.toUpperCase()}</td>
+      <td>${a.qty}</td>
+      <td>${a.inv.toFixed(2)}</td>
+      <td>${info.price.toFixed(2)}</td>
+      <td>${value.toFixed(2)}</td>
+      <td class="${gainClass}">${change}%</td>
+      <td>${cur.toUpperCase()}</td>
+    </tr>`;
+
+    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+
+    advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
+  }
+
+  const totalGain = val - inv;
+  const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
+  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
+
+  fetchOpportunities();
+}
 </script>
-</body>
-</html>
+<script>
+async function fetchOpportunities() {
+  const ul = document.getElementById("opportunities");
+  ul.innerHTML = '';
+  try {
+    const res = await fetch("https://api.coincap.io/v2/assets?limit=15");
+    const data = await res.json();
+    const top = data.data
+      .filter(c => parseFloat(c.changePercent24Hr) >= 5)
+      .sort((a, b) => parseFloat(b.changePercent24Hr) - parseFloat(a.changePercent24Hr))
+      .slice(0, 5);
+
+    if (top.length === 0) {
+      ul.innerHTML = '<li>Aucune opportunité majeure détectée.</li>';
+      return;
+    }
+
+    top.forEach(c => {
+      ul.innerHTML += `<li>${c.name} (${c.symbol}) : +${parseFloat(c.changePercent24Hr).toFixed(2)}%</li>`;
+    });
+  } catch (err) {
+    ul.innerHTML = '<li>Erreur de récupération des opportunités.</li>';
+    console.warn("Erreur CoinCap", err);
+  }
+}
+
+window.onload = () => {
+  refreshAll();
+  setInterval(refreshAll, 5 * 60 * 1000); // toutes les 5 minutes
+};
+</script>
+
+window.onload = () => {
+  refreshAll();
+  setInterval(refreshAll, 5 * 60 * 1000); // toutes les 5 minutes
+};
+</script>
