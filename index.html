@@ -98,28 +98,31 @@ async function fetchAction(sym) {
     return null;
   }
 }
+async function fetchCrypto(sym) {
+  const slug = sym.toLowerCase(); // ex : 'solana'
+  const currency = document.getElementById('devise').value.toUpperCase(); // CAD ou USD
 
-async function fetchCrypto(sym, currency = 'cad') {
   try {
-    const res = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${sym.toUpperCase()}&convert=${currency.toUpperCase()}`, {
+    const res = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?slug=${slug}&convert=${currency}`, {
       headers: {
-        'X-CMC_PRO_API_KEY': CMC_KEY
+        'X-CMC_PRO_API_KEY': '525f90fb-fadd-4910-80ba-e54965a43f46'
       }
     });
     const data = await res.json();
-    const coin = data.data[sym.toUpperCase()];
-    if (!coin || !coin.quote[currency.toUpperCase()]) return null;
+    const key = Object.keys(data.data)[0]; // récupère l'ID crypto (ex: 5426 pour Solana)
+
+    if (!data.data[key]) return null;
+
     return {
-      price: coin.quote[currency.toUpperCase()].price,
-      change: coin.quote[currency.toUpperCase()].percent_change_24h,
-      currency: currency.toUpperCase()
+      price: data.data[key].quote[currency].price,
+      change: data.data[key].quote[currency].percent_change_24h,
+      currency
     };
   } catch (err) {
-    console.warn("Erreur CoinMarketCap", err);
+    console.error("Erreur CoinMarketCap pour", sym, err);
     return null;
   }
 }
-
 function removeAsset() {
   const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
   portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
