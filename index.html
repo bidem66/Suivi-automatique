@@ -82,42 +82,35 @@
   <h2>Conseils personnalisés</h2>
   <ul id="adviceList"></ul>
 <script>
-const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
-const CMC_KEY = '525f90fb-fadd-4910-80ba-e54965a43f46';
-
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
+
+async function fetchExchangeRate() {
+  const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
+  const data = await res.json();
+  return data.rates.CAD || 1;
+}
 
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
+    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=d012dp1r01qv3oh29bi0d012dp1r01qv3oh29big`);
     const data = await res.json();
     if (!data.c || data.c === 0) return null;
     return { price: data.c, change: ((data.c - data.pc) / data.pc) * 100, currency: 'USD' };
   } catch { return null; }
 }
 
-async function fetchCrypto(sym, curr) {
-  const currency = curr ? curr.toUpperCase() : 'USD';
+async function fetchCrypto(sym, currency) {
+  const pair = sym.toUpperCase() + 'USDT';
   try {
-    const mapRes = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?symbol=${sym.toUpperCase()}`, {
-      headers: { 'X-CMC_PRO_API_KEY': CMC_KEY }
-    });
-    const mapData = await mapRes.json();
-    const coin = mapData.data?.[0];
-    if (!coin?.id) return null;
-
-    const quoteRes = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?id=${coin.id}&convert=${currency}`, {
-      headers: { 'X-CMC_PRO_API_KEY': CMC_KEY }
-    });
-    const quoteData = await quoteRes.json();
-    const data = quoteData.data?.[coin.id];
-    if (!data?.quote?.[currency]) return null;
-
-    return {
-      price: data.quote[currency].price,
-      change: data.quote[currency].percent_change_24h,
-      currency
-    };
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
+    const data = await res.json();
+    let price = parseFloat(data.lastPrice);
+    let change = parseFloat(data.priceChangePercent);
+    if (currency.toUpperCase() === 'CAD') {
+      const rate = await fetchExchangeRate();
+      price *= rate;
+    }
+    return { price, change, currency: currency.toUpperCase() };
   } catch {
     return null;
   }
@@ -152,7 +145,9 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   for (let a of portfolio) {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.currency || a.devise || 'USD') : await fetchAction(a.sym);
+    const info = a.type === 'crypto'
+      ? await fetchCrypto(a.sym, a.curr || a.currency || a.devise || 'USD')
+      : await fetchAction(a.sym);
     if (!info) {
       const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
       (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
@@ -188,10 +183,14 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=cad&order=price_change_percentage_24h_desc&per_page=5&page=1");
+    const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
     const data = await res.json();
-    data.forEach(c => {
-      ul.innerHTML += `<li>${c.name} (${c.symbol.toUpperCase()}) : +${c.price_change_percentage_24h.toFixed(2)}%</li>`;
+    const top = data
+      .filter(c => c.symbol.endsWith('USDT') && parseFloat(c.priceChangePercent) > 5)
+      .slice(0, 5);
+    top.forEach(c => {
+      const name = c.symbol.replace('USDT', '');
+      ul.innerHTML += `<li>${name} : +${parseFloat(c.priceChangePercent).toFixed(2)}%</li>`;
     });
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
