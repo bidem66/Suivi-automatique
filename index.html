@@ -85,7 +85,6 @@
 <ul id="opportunities"></ul>
 <h2>Conseils personnalisés</h2>
 <ul id="adviceList"></ul>
-
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 const NEWS_API_KEY = 'fe5128f148bd4e8ab813af15d9e809f4';
@@ -106,7 +105,9 @@ async function fetchExchangeRate() {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
     const data = await res.json();
     return data.rates?.CAD || 1.35;
-  } catch { return 1.35; }
+  } catch {
+    return 1.35;
+  }
 }
 
 async function fetchCrypto(sym, curr) {
@@ -194,21 +195,28 @@ async function fetchOpportunities() {
   try {
     const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
     const tickers = await res.json();
-    const top = tickers.filter(t => t.symbol.endsWith("USDT")).sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent)).slice(0, 10);
+    const top = tickers.filter(t => t.symbol.endsWith("USDT"))
+      .sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent))
+      .slice(0, 10);
 
-    const withNews = await Promise.all(top.map(async (t) => {
+    const withNews = [];
+    for (const t of top) {
       const name = t.symbol.replace("USDT", "");
-      const newsRes = await fetch(`https://newsapi.org/v2/everything?q=${name}&language=en&apiKey=${NEWS_API_KEY}`);
-      const news = await newsRes.json();
-      const sentiment = news.articles.length > 0 ? 'Positif' : 'Neutre';
-      return { name, change: parseFloat(t.priceChangePercent), sentiment };
-    }));
+      try {
+        const newsRes = await fetch(`https://newsapi.org/v2/everything?q=${name}&language=en&pageSize=1&apiKey=${NEWS_API_KEY}`);
+        const news = await newsRes.json();
+        const sentiment = (news.articles?.length || 0) > 0 ? 'Positif' : 'Neutre';
+        withNews.push({ name, change: parseFloat(t.priceChangePercent), sentiment });
+      } catch (e) {
+        withNews.push({ name, change: parseFloat(t.priceChangePercent), sentiment: 'Inconnu' });
+      }
+    }
 
     withNews.sort((a, b) => b.change - a.change);
     withNews.slice(0, 3).forEach(t => {
       ul.innerHTML += `<li><strong>${t.name}</strong> : +${t.change.toFixed(2)}% (Sentiment: ${t.sentiment})</li>`;
     });
-  } catch {
+  } catch (err) {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
