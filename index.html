@@ -1,5 +1,4 @@
-<!DOCTYPE html>
-<html lang="fr">
+<!DOCTYPE html><html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -44,10 +43,7 @@
     th { background: #eee; }
     .gain { color: green; }
     .perte { color: red; }
-    #globalPerf {
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
+    #globalPerf { font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -68,68 +64,58 @@
     <input id="removeSymbol" placeholder="Symbole à supprimer" />
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>
-
-  <div id="globalPerf"></div>
-
-  <h2>Actions</h2>
+  </div>  <div id="globalPerf"></div>  <h2>Actions</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableAction"></tbody>
-  </table>
-
-  <h2>Cryptos</h2>
+  </table>  <h2>Cryptos</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
-  </table>
-
-  <h2>Opportunités du moment</h2>
-  <ul id="opportunities"></ul>
-
-  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul>
-
-<script>
+  </table>  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul><script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+const CMC_KEY = '525f90fb-fadd-4910-80ba-e54965a43f46';
 
-let portfolio = localStorage.getItem('portfolio')
-  ? JSON.parse(localStorage.getItem('portfolio'))
-  : [
-      { type: 'action', sym: 'TSLA', qty: 0.8, inv: 250, curr: 'usd' },
-      { type: 'action', sym: 'NVDA', qty: 0.5, inv: 280, curr: 'usd' },
-      { type: 'crypto', sym: 'ethereum', qty: 0.1, inv: 350, curr: 'cad' },
-      { type: 'crypto', sym: 'solana', qty: 1.5, inv: 180, curr: 'cad' },
-      { type: 'crypto', sym: 'pepe', qty: 1000000, inv: 30, curr: 'cad' }
-    ];
+let portfolio = localStorage.getItem('portfolio') ? JSON.parse(localStorage.getItem('portfolio')) : [];
 
 async function fetchAction(sym) {
   try {
     const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
     const data = await res.json();
     if (!data.c || data.c === 0) return null;
-    const change = ((data.c - data.pc) / data.pc) * 100;
-    return { price: data.c, change, currency: 'USD' };
+    return {
+      price: data.c,
+      change: ((data.c - data.pc) / data.pc) * 100,
+      currency: 'USD'
+    };
   } catch {
     return null;
   }
 }
 
-async function fetchCrypto(sym) {
+async function fetchCrypto(sym, currency = 'cad') {
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${sym}&vs_currencies=cad,usd&include_24hr_change=true`);
+    const res = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=${sym.toUpperCase()}&convert=${currency.toUpperCase()}`, {
+      headers: {
+        'X-CMC_PRO_API_KEY': CMC_KEY
+      }
+    });
     const data = await res.json();
-    if (!data[sym]) return null;
+    const coin = data.data[sym.toUpperCase()];
+    if (!coin || !coin.quote[currency.toUpperCase()]) return null;
     return {
-      price: data[sym].cad || data[sym].usd,
-      change: data[sym].cad_24h_change || data[sym].usd_24h_change,
-      currency: data[sym].cad ? 'CAD' : 'USD'
+      price: coin.quote[currency.toUpperCase()].price,
+      change: coin.quote[currency.toUpperCase()].percent_change_24h,
+      currency: currency.toUpperCase()
     };
-  } catch {
+  } catch (err) {
+    console.warn("Erreur CoinMarketCap", err);
     return null;
   }
 }
@@ -163,7 +149,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   for (let a of portfolio) {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym) : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
     if (!info) {
       const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
       (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
@@ -192,7 +178,6 @@ async function refreshAll() {
   const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
-
   fetchOpportunities();
 }
 
@@ -214,6 +199,5 @@ window.onload = () => {
   refreshAll();
   setInterval(refreshAll, 5 * 60 * 1000);
 };
-</script>
-</body>
+</script></body>
 </html>
