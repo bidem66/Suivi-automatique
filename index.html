@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="fr">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -79,7 +80,8 @@
   <h2>Opportunités du moment</h2>
   <ul id="opportunities"></ul>
   <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul><script>
+  <ul id="adviceList"></ul>
+<script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 const CMC_KEY = '525f90fb-fadd-4910-80ba-e54965a43f46';
 
@@ -95,7 +97,7 @@ async function fetchAction(sym) {
 }
 
 async function fetchCrypto(sym, curr) {
-  const currency = curr.toUpperCase();
+  const currency = (curr || 'usd').toUpperCase();
   try {
     const mapRes = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?symbol=${sym.toUpperCase()}`, {
       headers: { 'X-CMC_PRO_API_KEY': CMC_KEY }
@@ -150,7 +152,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   for (let a of portfolio) {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.currency || 'usd') : await fetchAction(a.sym);
     if (!info) {
       const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
       (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
@@ -200,5 +202,6 @@ window.onload = () => {
   refreshAll();
   setInterval(refreshAll, 5 * 60 * 1000);
 };
-</script></body>
+</script>
+</body>
 </html>
