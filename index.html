@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
@@ -44,10 +44,7 @@
     th { background: #eee; }
     .gain { color: green; }
     .perte { color: red; }
-    #globalPerf {
-      font-weight: bold;
-      margin-bottom: 10px;
-    }
+    #globalPerf { font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -97,9 +94,7 @@
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 
-let portfolio = localStorage.getItem('portfolio')
-  ? JSON.parse(localStorage.getItem('portfolio'))
-  : [];
+let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
   try {
@@ -125,25 +120,16 @@ async function fetchExchangeRate() {
 
 async function fetchCrypto(sym, curr) {
   try {
-    const symbolPair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
+    const pair = sym.toUpperCase() + 'USDT';
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
     const data = await res.json();
     const usdPrice = parseFloat(data.lastPrice);
     const usdChange = parseFloat(data.priceChangePercent);
-
     if (curr.toUpperCase() === 'CAD') {
       const rate = await fetchExchangeRate();
-      return {
-        price: usdPrice * rate,
-        change: usdChange,
-        currency: 'CAD'
-      };
+      return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
     }
-    return {
-      price: usdPrice,
-      change: usdChange,
-      currency: 'USD'
-    };
+    return { price: usdPrice, change: usdChange, currency: 'USD' };
   } catch {
     return null;
   }
@@ -177,16 +163,21 @@ async function refreshAll() {
   tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = "";
   let inv = 0, val = 0;
 
-  for (let a of portfolio) {
+  const results = await Promise.all(portfolio.map(async a => {
     const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
-    if (!info) {
-      const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
-      (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
-      continue;
-    }
+    return { ...a, info };
+  }));
+
+  const sorted = results
+    .filter(e => e.info)
+    .sort((a, b) => b.info.change - a.info.change);
+
+  for (let a of sorted) {
+    const info = a.info;
     const value = info.price * a.qty;
     const gain = value - a.inv;
-    const change = info.change?.toFixed(2) || "0.00";
+    const sign = info.change >= 0 ? '+' : '-';
+    const change = Math.abs(info.change).toFixed(2);
     const gainClass = gain >= 0 ? 'gain' : 'perte';
     inv += a.inv;
     val += value;
@@ -196,7 +187,7 @@ async function refreshAll() {
       <td>${a.inv.toFixed(2)}</td>
       <td>${info.price.toFixed(2)}</td>
       <td>${value.toFixed(2)}</td>
-      <td class="${gainClass}">${change}%</td>
+      <td class="${gainClass}">${sign}${change}%</td>
       <td>${info.currency}</td>
     </tr>`;
     (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
