@@ -40,11 +40,6 @@
       border: 1px solid #ccc;
       padding: 4px;
       text-align: center;
-      cursor: default;
-    }
-    th.sortable:hover {
-      background-color: #ddd;
-      cursor: pointer;
     }
     th { background: #eee; }
     .gain { color: green; }
@@ -77,7 +72,7 @@
   <h2>Actions</h2>
   <table>
     <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th class="sortable" onclick="sortTable('tableAction')">Variation</th><th>Devise</th></tr>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableAction"></tbody>
   </table>
@@ -85,7 +80,7 @@
   <h2>Cryptos</h2>
   <table>
     <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th class="sortable" onclick="sortTable('tableCrypto')">Variation</th><th>Devise</th></tr>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
   </table>
@@ -98,6 +93,7 @@
 
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+const LUNAR_API_KEY = 'uqhsjk51pbpv43ta3b2fk2twm9om7gdni3l1han';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
@@ -107,7 +103,9 @@ async function fetchAction(sym) {
     if (!data.c || data.c === 0) return null;
     const change = ((data.c - data.pc) / data.pc) * 100;
     return { price: data.c, change, currency: 'USD' };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function fetchExchangeRate() {
@@ -132,6 +130,24 @@ async function fetchCrypto(sym, curr) {
       return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
     }
     return { price: usdPrice, change: usdChange, currency: 'USD' };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchSocialData(symbol) {
+  try {
+    const res = await fetch(`https://api.lunarcrush.com/v2?data=assets&key=${LUNAR_API_KEY}&symbol=${symbol.toUpperCase()}`);
+    const json = await res.json();
+    const asset = json.data?.[0];
+    if (!asset) return null;
+    return {
+      galaxyScore: asset.galaxy_score,
+      altRank: asset.alt_rank,
+      socialVolume: asset.social_volume,
+      socialScore: asset.social_score,
+      sentiment: asset.average_sentiment,
+    };
   } catch {
     return null;
   }
@@ -166,7 +182,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   const enriched = await Promise.all(portfolio.map(async (a) => {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.devise) : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
     return { ...a, info };
   }));
 
@@ -205,32 +221,21 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
   try {
-    const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
-    const data = await res.json();
-    const filtered = data.filter(c => c.symbol.endsWith("USDT") && parseFloat(c.priceChangePercent) > 5);
-    filtered.slice(0, 5).forEach(c => {
-      ul.innerHTML += `<li>${c.symbol.replace("USDT", "")} : +${parseFloat(c.priceChangePercent).toFixed(2)}%</li>`;
-    });
+    const coins = ['BTC', 'ETH', 'SOL'];
+    for (const sym of coins) {
+      const socialData = await fetchSocialData(sym);
+      if (socialData) {
+        ul.innerHTML += `<li><strong>${sym}</strong> - Galaxy Score: ${socialData.galaxyScore}, Sentiment: ${(socialData.sentiment * 100).toFixed(1)}%</li>`;
+      }
+    }
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
 
-function sortTable(tbodyId) {
-  const tbody = document.getElementById(tbodyId);
-  const rows = Array.from(tbody.querySelectorAll('tr'));
-  rows.sort((a, b) => {
-    const valA = parseFloat(a.cells[5].textContent);
-    const valB = parseFloat(b.cells[5].textContent);
-    return valB - valA;
-  });
-  tbody.innerHTML = '';
-  rows.forEach(row => tbody.appendChild(row));
-}
-
 window.onload = () => {
   refreshAll();
-  setInterval(refreshAll, 5 * 60 * 1000);
+  setInterval(refreshAll, 60 * 1000);
 };
 </script>
 </body>
