@@ -69,25 +69,23 @@
 <div id="globalPerf"></div>
 <h2>Actions</h2>
 <table>
-  <thead>
-    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
-  </thead>
+  <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
   <tbody id="tableAction"></tbody>
 </table>
 <h2>Cryptos</h2>
 <table>
-  <thead>
-    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
-  </thead>
+  <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
   <tbody id="tableCrypto"></tbody>
 </table>
 <h2>Opportunités du moment</h2>
 <ul id="opportunities"></ul>
 <h2>Conseils personnalisés</h2>
 <ul id="adviceList"></ul>
+
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 const NEWS_API_KEY = 'fe5128f148bd4e8ab813af15d9e809f4';
+
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
@@ -105,9 +103,7 @@ async function fetchExchangeRate() {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
     const data = await res.json();
     return data.rates?.CAD || 1.35;
-  } catch {
-    return 1.35;
-  }
+  } catch { return 1.35; }
 }
 
 async function fetchCrypto(sym, curr) {
@@ -196,34 +192,39 @@ async function fetchOpportunities() {
     const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
     const tickers = await res.json();
     const top = tickers.filter(t => t.symbol.endsWith("USDT"))
-      .sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent))
+      .map(t => ({
+        symbol: t.symbol.replace("USDT", ""),
+        change: parseFloat(t.priceChangePercent),
+        volume: parseFloat(t.quoteVolume)
+      }))
+      .sort((a, b) => b.change - a.change)
       .slice(0, 10);
 
-    const withNews = [];
-    for (const t of top) {
-      const name = t.symbol.replace("USDT", "");
-      try {
-        const newsRes = await fetch(`https://newsapi.org/v2/everything?q=${name}&language=en&pageSize=1&apiKey=${NEWS_API_KEY}`);
-        const news = await newsRes.json();
-        const sentiment = (news.articles?.length || 0) > 0 ? 'Positif' : 'Neutre';
-        withNews.push({ name, change: parseFloat(t.priceChangePercent), sentiment });
-      } catch (e) {
-        withNews.push({ name, change: parseFloat(t.priceChangePercent), sentiment: 'Inconnu' });
-      }
-    }
+    const enriched = await Promise.all(top.map(async t => {
+      const newsRes = await fetch(`https://newsapi.org/v2/everything?q=${t.symbol}&language=en&apiKey=${NEWS_API_KEY}`);
+      const news = await newsRes.json();
+      const article = news.articles[0]?.title || "Aucune info récente.";
+      const score = t.change * 0.5 + Math.log10(t.volume) * 0.3 + (news.articles.length > 0 ? 10 : 0);
+      return {
+        name: t.symbol,
+        forecast: `+${(t.change * 1.1).toFixed(1)}%`,
+        horizon: "2-4 jours",
+        score: score.toFixed(1),
+        reason: article
+      };
+    }));
 
-    withNews.sort((a, b) => b.change - a.change);
-    withNews.slice(0, 3).forEach(t => {
-      ul.innerHTML += `<li><strong>${t.name}</strong> : +${t.change.toFixed(2)}% (Sentiment: ${t.sentiment})</li>`;
+    enriched.sort((a, b) => b.score - a.score).slice(0, 3).forEach(e => {
+      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.score}/10<br/><em>${e.reason}</em></li>`;
     });
-  } catch (err) {
+  } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
 
 window.onload = () => {
   refreshAll();
-  setInterval(refreshAll, 60 * 1000);
+  setInterval(refreshAll, 60000);
 };
 </script>
 </body>
