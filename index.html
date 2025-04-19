@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="fr">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -64,21 +65,27 @@
     <input id="removeSymbol" placeholder="Symbole à supprimer" />
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>  <div id="globalPerf"></div>  <h2>Actions</h2>
+  </div>
+  <div id="globalPerf"></div>
+  <h2>Actions</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableAction"></tbody>
-  </table>  <h2>Cryptos</h2>
+  </table>
+  <h2>Cryptos</h2>
   <table>
     <thead>
       <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
-  </table>  <h2>Opportunités du moment</h2>
-  <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul><script>
+  </table>
+  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>
+  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul>
+<script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 const CMC_KEY = '525f90fb-fadd-4910-80ba-e54965a43f46';
 
@@ -89,40 +96,32 @@ async function fetchAction(sym) {
     const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
     const data = await res.json();
     if (!data.c || data.c === 0) return null;
-    return {
-      price: data.c,
-      change: ((data.c - data.pc) / data.pc) * 100,
-      currency: 'USD'
-    };
+    return { price: data.c, change: ((data.c - data.pc) / data.pc) * 100, currency: 'USD' };
   } catch {
     return null;
   }
 }
-async function fetchCrypto(sym) {
-  const slug = sym.toLowerCase(); // ex : 'solana'
-  const currency = document.getElementById('devise').value.toUpperCase(); // CAD ou USD
 
+async function fetchCrypto(sym, curr) {
+  const slug = sym.toLowerCase();
+  const currency = curr.toUpperCase();
   try {
     const res = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?slug=${slug}&convert=${currency}`, {
-      headers: {
-        'X-CMC_PRO_API_KEY': '525f90fb-fadd-4910-80ba-e54965a43f46'
-      }
+      headers: { 'X-CMC_PRO_API_KEY': CMC_KEY }
     });
     const data = await res.json();
-    const key = Object.keys(data.data)[0]; // récupère l'ID crypto (ex: 5426 pour Solana)
-
+    const key = Object.keys(data.data)[0];
     if (!data.data[key]) return null;
-
     return {
       price: data.data[key].quote[currency].price,
       change: data.data[key].quote[currency].percent_change_24h,
       currency
     };
-  } catch (err) {
-    console.error("Erreur CoinMarketCap pour", sym, err);
+  } catch {
     return null;
   }
 }
+
 function removeAsset() {
   const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
   portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
@@ -202,5 +201,6 @@ window.onload = () => {
   refreshAll();
   setInterval(refreshAll, 5 * 60 * 1000);
 };
-</script></body>
+</script>
+</body>
 </html>
