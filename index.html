@@ -1,4 +1,5 @@
-<!DOCTYPE html><html lang="fr">
+<!DOCTYPE html>
+<html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -87,7 +88,7 @@ const NEWS_API_KEY = 'fe5128f148bd4e8ab813af15d9e809f4';
 const TAAPI_KEY = '6mqwrl63sn24ipwa9h2xddah0em9oi4qq0wazbkwp';
 const LUNAR_API_KEY = 'uqhsjk51pbpv43ta3b2fk2twm9om7gdni3l1han';
 const COINMARKETCAL_KEY = '6803e03a806ff1651ee9dcde';
-const TOKEN_TERMINAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5...'; // tronqué ici pour affichage
+const TOKEN_TERMINAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5...';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
@@ -98,7 +99,9 @@ async function fetchAction(sym) {
     if (!data.c || data.c === 0) return null;
     const change = ((data.c - data.pc) / data.pc) * 100;
     return { price: data.c, change, currency: 'USD' };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 async function fetchExchangeRate() {
@@ -106,7 +109,9 @@ async function fetchExchangeRate() {
     const res = await fetch(`${PROXY}https://api.exchangerate.host/latest?base=USD&symbols=CAD`);
     const data = await res.json();
     return data.rates?.CAD || 1.35;
-  } catch { return 1.35; }
+  } catch {
+    return 1.35;
+  }
 }
 
 async function fetchCrypto(sym, curr) {
@@ -121,9 +126,32 @@ async function fetchCrypto(sym, curr) {
       return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
     }
     return { price: usdPrice, change: usdChange, currency: 'USD' };
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
-// --- fetchOpportunities avec IA enrichie via proxy ---
+
+function removeAsset() {
+  const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
+  portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  refreshAll();
+}
+
+async function addAsset() {
+  const type = document.getElementById('type').value;
+  const symInput = document.getElementById('symbol').value.trim();
+  const qty = parseFloat(document.getElementById('quantity').value);
+  const inv = parseFloat(document.getElementById('invested').value);
+  const curr = document.getElementById('devise').value;
+  if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
+  const sym = symInput.toLowerCase();
+  portfolio.push({ type, sym, qty, inv, curr });
+  localStorage.setItem('portfolio', JSON.stringify(portfolio));
+  await refreshAll();
+}
+// Partie 3 : Opportunités IA enrichies et lancement auto
+
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
@@ -193,9 +221,7 @@ async function fetchOpportunities() {
       .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
       .slice(0, 3)
       .forEach(e => {
-        ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>
-        Confiance IA: ${e.confidence}/10<br/>
-        <em>${e.reason}</em><br/>${e.extra}</li>`;
+        ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
       });
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
@@ -205,6 +231,16 @@ async function fetchOpportunities() {
 window.onload = () => {
   refreshAll();
   setInterval(refreshAll, 60000);
+};
+});
+  } catch {
+    ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
+  }
+}
+
+window.onload = () => {
+  refreshAll();
+  setInterval(refreshAll, 60000); // Actualise toutes les 60s
 };
 </script>
 </body>
