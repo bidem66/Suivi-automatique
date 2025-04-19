@@ -40,6 +40,11 @@
       border: 1px solid #ccc;
       padding: 4px;
       text-align: center;
+      cursor: default;
+    }
+    th.sortable:hover {
+      background-color: #ddd;
+      cursor: pointer;
     }
     th { background: #eee; }
     .gain { color: green; }
@@ -72,7 +77,7 @@
   <h2>Actions</h2>
   <table>
     <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th class="sortable" onclick="sortTable('tableAction')">Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableAction"></tbody>
   </table>
@@ -80,7 +85,7 @@
   <h2>Cryptos</h2>
   <table>
     <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th class="sortable" onclick="sortTable('tableCrypto')">Variation</th><th>Devise</th></tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
   </table>
@@ -93,7 +98,6 @@
 
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
-
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
@@ -103,9 +107,7 @@ async function fetchAction(sym) {
     if (!data.c || data.c === 0) return null;
     const change = ((data.c - data.pc) / data.pc) * 100;
     return { price: data.c, change, currency: 'USD' };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function fetchExchangeRate() {
@@ -120,8 +122,8 @@ async function fetchExchangeRate() {
 
 async function fetchCrypto(sym, curr) {
   try {
-    const pair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
+    const symbolPair = sym.toUpperCase() + 'USDT';
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
     const data = await res.json();
     const usdPrice = parseFloat(data.lastPrice);
     const usdChange = parseFloat(data.priceChangePercent);
@@ -163,22 +165,20 @@ async function refreshAll() {
   tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = "";
   let inv = 0, val = 0;
 
-  const results = await Promise.all(portfolio.map(async a => {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
+  const enriched = await Promise.all(portfolio.map(async (a) => {
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.devise) : await fetchAction(a.sym);
     return { ...a, info };
   }));
 
-  const sorted = results
-    .filter(e => e.info)
-    .sort((a, b) => b.info.change - a.info.change);
+  const sorted = enriched.filter(e => e.info).sort((a, b) => b.info.change - a.info.change);
 
   for (let a of sorted) {
     const info = a.info;
     const value = info.price * a.qty;
     const gain = value - a.inv;
-    const sign = info.change >= 0 ? '+' : '-';
-    const change = Math.abs(info.change).toFixed(2);
+    const change = info.change?.toFixed(2) || "0.00";
     const gainClass = gain >= 0 ? 'gain' : 'perte';
+    const sign = gain >= 0 ? '+' : '-';
     inv += a.inv;
     val += value;
     const row = `<tr>
@@ -187,7 +187,7 @@ async function refreshAll() {
       <td>${a.inv.toFixed(2)}</td>
       <td>${info.price.toFixed(2)}</td>
       <td>${value.toFixed(2)}</td>
-      <td class="${gainClass}">${sign}${change}%</td>
+      <td class="${gainClass}">${sign}${Math.abs(change)}%</td>
       <td>${info.currency}</td>
     </tr>`;
     (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
@@ -214,6 +214,18 @@ async function fetchOpportunities() {
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
+}
+
+function sortTable(tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  const rows = Array.from(tbody.querySelectorAll('tr'));
+  rows.sort((a, b) => {
+    const valA = parseFloat(a.cells[5].textContent);
+    const valB = parseFloat(b.cells[5].textContent);
+    return valB - valA;
+  });
+  tbody.innerHTML = '';
+  rows.forEach(row => tbody.appendChild(row));
 }
 
 window.onload = () => {
