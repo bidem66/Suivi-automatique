@@ -81,14 +81,16 @@
 <ul id="opportunities"></ul>
 <h2>Conseils personnalisés</h2>
 <ul id="adviceList"></ul>
-
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
 const NEWS_API_KEY = 'fe5128f148bd4e8ab813af15d9e809f4';
+const TAAPI_KEY = '6mqwrl63sn24ipwa9h2xddah0em9oi4qq0wazbkwp';
+const LUNAR_API_KEY = 'uqhsjk51pbpv43ta3b2fk2twm9om7gdni3l1han';
+const COINMARKETCAL_KEY = '6803e03a806ff1651ee9dcde';
+const TOKEN_TERMINAL_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJjbHVlIjoiNjgwM2UwM2E4MDZmZjE2NTFlZTlkY2RlIiwiaWF0IjoxNzQ1MDkxODcxLCJleHAiOjMzMjQ5NTU1ODcxfQ.Yy5K3bm7pEU-casE0Lk3KqC-6g6fxnrETMnD9GQUDnU';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
-
-async function fetchAction(sym) {
+  async function fetchAction(sym) {
   try {
     const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
     const data = await res.json();
@@ -184,14 +186,14 @@ async function refreshAll() {
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
   fetchOpportunities();
 }
-
-async function fetchOpportunities() {
+  async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
   try {
     const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
     const tickers = await res.json();
-    const top = tickers.filter(t => t.symbol.endsWith("USDT"))
+    const top = tickers
+      .filter(t => t.symbol.endsWith("USDT"))
       .map(t => ({
         symbol: t.symbol.replace("USDT", ""),
         change: parseFloat(t.priceChangePercent),
@@ -201,22 +203,62 @@ async function fetchOpportunities() {
       .slice(0, 10);
 
     const enriched = await Promise.all(top.map(async t => {
-      const newsRes = await fetch(`https://newsapi.org/v2/everything?q=${t.symbol}&language=en&apiKey=${NEWS_API_KEY}`);
-      const news = await newsRes.json();
-      const article = news.articles[0]?.title || "Aucune info récente.";
-      const score = t.change * 0.5 + Math.log10(t.volume) * 0.3 + (news.articles.length > 0 ? 10 : 0);
-      return {
-        name: t.symbol,
-        forecast: `+${(t.change * 1.1).toFixed(1)}%`,
-        horizon: "2-4 jours",
-        score: score.toFixed(1),
-        reason: article
-      };
+      try {
+        const [newsRes, rsiRes, macdRes, socialRes, eventRes, onchainRes] = await Promise.all([
+          fetch(`https://newsapi.org/v2/everything?q=${t.symbol}&language=en&apiKey=${NEWS_API_KEY}`),
+          fetch(`https://api.taapi.io/rsi?secret=${TAAPI_KEY}&exchange=binance&symbol=${t.symbol}/USDT&interval=1h`),
+          fetch(`https://api.taapi.io/macd?secret=${TAAPI_KEY}&exchange=binance&symbol=${t.symbol}/USDT&interval=1h`),
+          fetch(`https://lunarcrush.com/api3/coins?symbol=${t.symbol}&key=${LUNAR_API_KEY}`),
+          fetch(`https://developers.coinmarketcal.com/v1/events?coins=${t.symbol}&access_token=${COINMARKETCAL_KEY}`),
+          fetch(`https://api.tokenterminal.com/v2/projects/${t.symbol}/metrics/active_addresses_24h`, {
+            headers: { Authorization: `Bearer ${TOKEN_TERMINAL_KEY}` }
+          })
+        ]);
+
+        const news = await newsRes.json();
+        const rsiData = await rsiRes.json();
+        const macdData = await macdRes.json();
+        const social = await socialRes.json();
+        const events = await eventRes.json();
+        const onchain = await onchainRes.json();
+
+        const rsi = rsiData.value;
+        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+        const socialScore = social?.data?.[0]?.galaxy_score || 30;
+        const hasEvent = events?.body?.length > 0;
+        const activeAddresses = onchain?.data?.value || 0;
+
+        const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
+        const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
+        const socialBoost = socialScore > 60 ? 1.2 : 1;
+        const eventBoost = hasEvent ? 1.2 : 1;
+        const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
+
+        const forecast = t.change * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
+        const article = news.articles[0]?.title || "Aucune info récente.";
+        const eventNote = hasEvent ? `Événement à venir: ${events.body[0].title}` : "";
+
+        return {
+          name: t.symbol,
+          forecast: `+${forecast.toFixed(1)}%`,
+          horizon: "2-4 jours",
+          confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
+          reason: article,
+          extra: eventNote
+        };
+      } catch (e) {
+        return { name: t.symbol, forecast: "+0.0%", confidence: "0.0", reason: "Erreur d’analyse IA", extra: "" };
+      }
     }));
 
-    enriched.sort((a, b) => b.score - a.score).slice(0, 3).forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.score}/10<br/><em>${e.reason}</em></li>`;
-    });
+    enriched
+      .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+      .slice(0, 3)
+      .forEach(e => {
+        ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>
+        Confiance IA: ${e.confidence}/10<br/>
+        <em>${e.reason}</em><br/>${e.extra}</li>`;
+      });
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
