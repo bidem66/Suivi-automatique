@@ -44,7 +44,10 @@
     th { background: #eee; }
     .gain { color: green; }
     .perte { color: red; }
-    #globalPerf { font-weight: bold; margin-bottom: 10px; }
+    #globalPerf {
+      font-weight: bold;
+      margin-bottom: 10px;
+    }
   </style>
 </head>
 <body>
@@ -66,51 +69,81 @@
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
   </div>
+
   <div id="globalPerf"></div>
+
   <h2>Actions</h2>
   <table>
-    <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
+    <thead>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+    </thead>
     <tbody id="tableAction"></tbody>
   </table>
+
   <h2>Cryptos</h2>
   <table>
-    <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
+    <thead>
+      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+    </thead>
     <tbody id="tableCrypto"></tbody>
   </table>
+
   <h2>Opportunités du moment</h2>
   <ul id="opportunities"></ul>
+
   <h2>Conseils personnalisés</h2>
   <ul id="adviceList"></ul>
-<script>
-let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
-async function fetchExchangeRate() {
-  const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
-  const data = await res.json();
-  return data.rates.CAD || 1;
-}
+<script>
+const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+
+let portfolio = localStorage.getItem('portfolio')
+  ? JSON.parse(localStorage.getItem('portfolio'))
+  : [];
 
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=d012dp1r01qv3oh29bi0d012dp1r01qv3oh29big`);
+    const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
     const data = await res.json();
     if (!data.c || data.c === 0) return null;
-    return { price: data.c, change: ((data.c - data.pc) / data.pc) * 100, currency: 'USD' };
-  } catch { return null; }
+    const change = ((data.c - data.pc) / data.pc) * 100;
+    return { price: data.c, change, currency: 'USD' };
+  } catch {
+    return null;
+  }
 }
 
-async function fetchCrypto(sym, currency) {
-  const pair = sym.toUpperCase() + 'USDT';
+async function fetchExchangeRate() {
   try {
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
+    const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
     const data = await res.json();
-    let price = parseFloat(data.lastPrice);
-    let change = parseFloat(data.priceChangePercent);
-    if (currency.toUpperCase() === 'CAD') {
+    return data.rates?.CAD || 1.35;
+  } catch {
+    return 1.35;
+  }
+}
+
+async function fetchCrypto(sym, curr) {
+  try {
+    const symbolPair = sym.toUpperCase() + 'USDT';
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
+    const data = await res.json();
+    const usdPrice = parseFloat(data.lastPrice);
+    const usdChange = parseFloat(data.priceChangePercent);
+
+    if (curr.toUpperCase() === 'CAD') {
       const rate = await fetchExchangeRate();
-      price *= rate;
+      return {
+        price: usdPrice * rate,
+        change: usdChange,
+        currency: 'CAD'
+      };
     }
-    return { price, change, currency: currency.toUpperCase() };
+    return {
+      price: usdPrice,
+      change: usdChange,
+      currency: 'USD'
+    };
   } catch {
     return null;
   }
@@ -130,7 +163,7 @@ async function addAsset() {
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value;
   if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-  const sym = symInput.toUpperCase();
+  const sym = symInput.toLowerCase();
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
@@ -145,9 +178,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   for (let a of portfolio) {
-    const info = a.type === 'crypto'
-      ? await fetchCrypto(a.sym, a.curr || a.currency || a.devise || 'USD')
-      : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
     if (!info) {
       const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
       (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
@@ -185,12 +216,9 @@ async function fetchOpportunities() {
   try {
     const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
     const data = await res.json();
-    const top = data
-      .filter(c => c.symbol.endsWith('USDT') && parseFloat(c.priceChangePercent) > 5)
-      .slice(0, 5);
-    top.forEach(c => {
-      const name = c.symbol.replace('USDT', '');
-      ul.innerHTML += `<li>${name} : +${parseFloat(c.priceChangePercent).toFixed(2)}%</li>`;
+    const filtered = data.filter(c => c.symbol.endsWith("USDT") && parseFloat(c.priceChangePercent) > 5);
+    filtered.slice(0, 5).forEach(c => {
+      ul.innerHTML += `<li>${c.symbol.replace("USDT", "")} : +${parseFloat(c.priceChangePercent).toFixed(2)}%</li>`;
     });
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
