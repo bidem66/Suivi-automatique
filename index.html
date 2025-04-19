@@ -48,52 +48,47 @@
   </style>
 </head>
 <body>
-  <h1>Dashboard Portefeuille</h1>
-  <div class="controls">
-    <select id="type">
-      <option value="crypto">Crypto</option>
-      <option value="action">Action</option>
-    </select>
-    <input id="symbol" placeholder="Symbole (ex: BTC, AAPL)" />
-    <input id="quantity" type="number" placeholder="Quantité" />
-    <input id="invested" type="number" placeholder="Investi" />
-    <select id="devise">
-      <option value="cad">CAD</option>
-      <option value="usd">USD</option>
-    </select>
-    <button onclick="addAsset()">Ajouter</button>
-    <input id="removeSymbol" placeholder="Symbole à supprimer" />
-    <button onclick="removeAsset()">Supprimer</button>
-    <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>
-
-  <div id="globalPerf"></div>
-
-  <h2>Actions</h2>
-  <table>
-    <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
-    </thead>
-    <tbody id="tableAction"></tbody>
-  </table>
-
-  <h2>Cryptos</h2>
-  <table>
-    <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
-    </thead>
-    <tbody id="tableCrypto"></tbody>
-  </table>
-
-  <h2>Opportunités du moment</h2>
-  <ul id="opportunities"></ul>
-
-  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul>
+<h1>Dashboard Portefeuille</h1>
+<div class="controls">
+  <select id="type">
+    <option value="crypto">Crypto</option>
+    <option value="action">Action</option>
+  </select>
+  <input id="symbol" placeholder="Symbole (ex: BTC, AAPL)" />
+  <input id="quantity" type="number" placeholder="Quantité" />
+  <input id="invested" type="number" placeholder="Investi" />
+  <select id="devise">
+    <option value="cad">CAD</option>
+    <option value="usd">USD</option>
+  </select>
+  <button onclick="addAsset()">Ajouter</button>
+  <input id="removeSymbol" placeholder="Symbole à supprimer" />
+  <button onclick="removeAsset()">Supprimer</button>
+  <button onclick="refreshAll()">Actualiser maintenant</button>
+</div>
+<div id="globalPerf"></div>
+<h2>Actions</h2>
+<table>
+  <thead>
+    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+  </thead>
+  <tbody id="tableAction"></tbody>
+</table>
+<h2>Cryptos</h2>
+<table>
+  <thead>
+    <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+  </thead>
+  <tbody id="tableCrypto"></tbody>
+</table>
+<h2>Opportunités du moment</h2>
+<ul id="opportunities"></ul>
+<h2>Conseils personnalisés</h2>
+<ul id="adviceList"></ul>
 
 <script>
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
-const LUNAR_API_KEY = 'uqhsjk51pbpv43ta3b2fk2twm9om7gdni3l1han';
+const NEWS_API_KEY = 'fe5128f148bd4e8ab813af15d9e809f4';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
@@ -103,9 +98,7 @@ async function fetchAction(sym) {
     if (!data.c || data.c === 0) return null;
     const change = ((data.c - data.pc) / data.pc) * 100;
     return { price: data.c, change, currency: 'USD' };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 async function fetchExchangeRate() {
@@ -113,9 +106,7 @@ async function fetchExchangeRate() {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
     const data = await res.json();
     return data.rates?.CAD || 1.35;
-  } catch {
-    return 1.35;
-  }
+  } catch { return 1.35; }
 }
 
 async function fetchCrypto(sym, curr) {
@@ -130,27 +121,7 @@ async function fetchCrypto(sym, curr) {
       return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
     }
     return { price: usdPrice, change: usdChange, currency: 'USD' };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchSocialData(symbol) {
-  try {
-    const res = await fetch(`https://api.lunarcrush.com/v2?data=assets&key=${LUNAR_API_KEY}&symbol=${symbol.toUpperCase()}`);
-    const json = await res.json();
-    const asset = json.data?.[0];
-    if (!asset) return null;
-    return {
-      galaxyScore: asset.galaxy_score,
-      altRank: asset.alt_rank,
-      socialVolume: asset.social_volume,
-      socialScore: asset.social_score,
-      sentiment: asset.average_sentiment,
-    };
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function removeAsset() {
@@ -182,7 +153,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   const enriched = await Promise.all(portfolio.map(async (a) => {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.devise) : await fetchAction(a.sym);
     return { ...a, info };
   }));
 
@@ -221,13 +192,22 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
   try {
-    const coins = ['BTC', 'ETH', 'SOL'];
-    for (const sym of coins) {
-      const socialData = await fetchSocialData(sym);
-      if (socialData) {
-        ul.innerHTML += `<li><strong>${sym}</strong> - Galaxy Score: ${socialData.galaxyScore}, Sentiment: ${(socialData.sentiment * 100).toFixed(1)}%</li>`;
-      }
-    }
+    const res = await fetch("https://api.binance.com/api/v3/ticker/24hr");
+    const tickers = await res.json();
+    const top = tickers.filter(t => t.symbol.endsWith("USDT")).sort((a, b) => parseFloat(b.priceChangePercent) - parseFloat(a.priceChangePercent)).slice(0, 10);
+
+    const withNews = await Promise.all(top.map(async (t) => {
+      const name = t.symbol.replace("USDT", "");
+      const newsRes = await fetch(`https://newsapi.org/v2/everything?q=${name}&language=en&apiKey=${NEWS_API_KEY}`);
+      const news = await newsRes.json();
+      const sentiment = news.articles.length > 0 ? 'Positif' : 'Neutre';
+      return { name, change: parseFloat(t.priceChangePercent), sentiment };
+    }));
+
+    withNews.sort((a, b) => b.change - a.change);
+    withNews.slice(0, 3).forEach(t => {
+      ul.innerHTML += `<li><strong>${t.name}</strong> : +${t.change.toFixed(2)}% (Sentiment: ${t.sentiment})</li>`;
+    });
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
