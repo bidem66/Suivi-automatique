@@ -227,7 +227,54 @@ async function fetchOpportunities() {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
-window.onload = () => {
+async function refreshAll() {
+  const tbodyA = document.getElementById("tableAction");
+  const tbodyC = document.getElementById("tableCrypto");
+  const advice = document.getElementById("adviceList");
+  const perf = document.getElementById("globalPerf");
+
+  tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = "";
+  let inv = 0, val = 0;
+
+  const enriched = await Promise.all(portfolio.map(async (a) => {
+    const info = a.type === 'crypto'
+      ? await fetchCrypto(a.sym, a.curr || a.devise)
+      : await fetchAction(a.sym);
+    return { ...a, info };
+  }));
+
+  const sorted = enriched.filter(e => e.info).sort((a, b) => b.info.change - a.info.change);
+
+  for (let a of sorted) {
+    const info = a.info;
+    const value = info.price * a.qty;
+    const gain = value - a.inv;
+    const change = info.change?.toFixed(2) || "0.00";
+    const gainClass = gain >= 0 ? 'gain' : 'perte';
+    const sign = gain >= 0 ? '+' : '-';
+    inv += a.inv;
+    val += value;
+    const row = `<tr>
+      <td>${a.sym.toUpperCase()}</td>
+      <td>${a.qty}</td>
+      <td>${a.inv.toFixed(2)}</td>
+      <td>${info.price.toFixed(2)}</td>
+      <td>${value.toFixed(2)}</td>
+      <td class="${gainClass}">${sign}${Math.abs(change)}%</td>
+      <td>${info.currency}</td>
+    </tr>`;
+    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+    advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
+  }
+
+  const totalGain = val - inv;
+  const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
+  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
+
+  await fetchOpportunities();
+}
+  window.onload = () => {
   refreshAll();
   setInterval(refreshAll, 60000);
 };
