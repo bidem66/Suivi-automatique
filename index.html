@@ -97,7 +97,7 @@ async function fetchAction(sym) {
 }
 
 async function fetchCrypto(sym, curr) {
-  const currency = (curr || 'usd').toUpperCase();
+  const currency = curr ? curr.toUpperCase() : 'USD';
   try {
     const mapRes = await fetch(`https://pro-api.coinmarketcap.com/v1/cryptocurrency/map?symbol=${sym.toUpperCase()}`, {
       headers: { 'X-CMC_PRO_API_KEY': CMC_KEY }
@@ -137,7 +137,7 @@ async function addAsset() {
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value;
   if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-  const sym = type === 'crypto' ? symInput.toLowerCase() : symInput.toUpperCase();
+  const sym = symInput.toUpperCase();
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
@@ -152,7 +152,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   for (let a of portfolio) {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.currency || 'usd') : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.currency || a.devise || 'USD') : await fetchAction(a.sym);
     if (!info) {
       const row = `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv}</td><td colspan="4" style="color:red">Données indisponibles</td></tr>`;
       (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
