@@ -1,19 +1,20 @@
-// script.js (modifié avec suppression de la clé FINNHUB dans le frontend)
+// script.js (modifié avec meilleure tolérance pour actions sans pc - previousClose)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
+
 async function fetchAction(sym) {
   try {
     const res = await fetch(`${PROXY}finnhub?symbol=${sym}`);
     const data = await res.json();
-    if (!data.c || data.c === 0) return null;
-    const change = ((data.c - data.pc) / data.pc) * 100;
+    const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
     return { price: data.c, change, currency: 'USD' };
   } catch {
     return null;
   }
 }
+
 async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
@@ -60,6 +61,7 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
+
 
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
