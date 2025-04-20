@@ -68,24 +68,23 @@ async function fetchOpportunities() {
   const allTickers = [];
 
   try {
-    // Étendre à 500 cryptos via 2 requêtes CoinGecko (250 max par page)
-    const [page1, page2] = await Promise.all([
+    const pages = await Promise.all([
       fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1"),
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2"
+      )
     ]);
-    allTickers.push(...await page1.json(), ...await page2.json());
+    for (const p of pages) allTickers.push(...await p.json());
   } catch {
     ul.innerHTML = '<li>Erreur lors du chargement des cryptos CoinGecko</li>';
     return;
   }
 
-  const enriched = await Promise.all(allTickers.map(async t => {
-    const id = t.id;
-    const sym = t.symbol.toUpperCase();
+  let final = [];
+  for (const t of allTickers) {
     try {
-      const [
-        newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes
-      ] = await Promise.all([
+      const id = t.id;
+      const sym = t.symbol.toUpperCase();
+      const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
         fetch(`${PROXY}news?q=${id}`),
         fetch(`${PROXY}rsi?symbol=${sym}`),
         fetch(`${PROXY}macd?symbol=${sym}`),
@@ -118,34 +117,27 @@ async function fetchOpportunities() {
       const article = news.articles[0]?.title || "Aucune info récente.";
       const eventNote = hasEvent ? `Événement: ${eventList[0].title || "à venir"}` : "";
 
-      return {
+      final.push({
         name: sym,
         forecast,
         article,
         confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 10).toFixed(1),
         extra: eventNote
-      };
-    } catch {
-      return null;
-    }
-  }));
+      });
+    } catch {}
+    if (final.length >= 5) break;
+  }
 
-  const filtered = enriched
-    .filter(e => e && e.forecast > 5)
-    .sort((a, b) => b.forecast - a.forecast)
-    .slice(0, 5);
-
-  if (filtered.length === 0) {
+  if (final.length === 0) {
     ul.innerHTML = '<li>Aucune opportunité forte détectée.</li>';
     return;
   }
 
-  filtered.forEach(e => {
+  final.forEach(e => {
     const horizon = e.forecast > 30 ? "7-30 jours" : "3-7 jours";
     ul.innerHTML += `<li><strong>${e.name}</strong> : +${e.forecast.toFixed(1)}% attendu d'ici ${horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.article}</em><br/>${e.extra}</li>`;
   });
 }
-
 
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
