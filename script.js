@@ -92,6 +92,12 @@ async function fetchOpportunities() {
           fetch(`${PROXY}onchain?symbol=${t.symbol}`)
         ]);
 
+        if (!newsRes.ok || !rsiRes.ok || !macdRes.ok || !eventRes.ok || !onchainRes.ok) {
+          throw new Error(
+            `Status → News: ${newsRes.status}, RSI: ${rsiRes.status}, MACD: ${macdRes.status}, Events: ${eventRes.status}, OnChain: ${onchainRes.status}`
+          );
+        }
+
         const news = await newsRes.json();
         const rsiData = await rsiRes.json();
         const macdData = await macdRes.json();
