@@ -1,4 +1,4 @@
-// script.js (modifié avec meilleures prévisions IA pour opportunités)
+// script.js (modifié avec meilleures prévisions IA + CoinGecko via proxy)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
@@ -69,10 +69,10 @@ async function fetchOpportunities() {
 
   try {
     const pages = await Promise.all([
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1"),
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2"),
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=3"),
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=4")
+      fetch(`${PROXY}coingecko?page=1`),
+      fetch(`${PROXY}coingecko?page=2`),
+      fetch(`${PROXY}coingecko?page=3`),
+      fetch(`${PROXY}coingecko?page=4`)
     ]);
     for (const p of pages) allTickers.push(...await p.json());
   } catch {
