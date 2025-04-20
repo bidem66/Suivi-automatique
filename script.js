@@ -55,7 +55,7 @@ async function addAsset() {
   const symInput = document.getElementById('symbol').value.trim();
   const qty = parseFloat(document.getElementById('quantity').value);
   const inv = parseFloat(document.getElementById('invested').value);
-  const curr = document.getElementById('devise').value;
+  const curr = document.getElementById('devise').value.toUpperCase();
   if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
   const sym = symInput.toUpperCase();
   portfolio.push({ type, sym, qty, inv, curr });
@@ -139,7 +139,7 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   const enriched = await Promise.all(portfolio.map(async (a) => {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr || a.devise) : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
     return { ...a, info };
   }));
 
