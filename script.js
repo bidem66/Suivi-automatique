@@ -63,7 +63,6 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
-
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
@@ -72,15 +71,16 @@ async function fetchOpportunities() {
     const tickers = await res.json();
 
     const enriched = await Promise.all(tickers.map(async t => {
-      const symbol = t.symbol.toUpperCase();
+      const symbol = t.id.toLowerCase(); // ex: 'bitcoin'
+
       try {
         const [newsRes, rsiRes, macdRes, socialRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}https://newsapi.org/v2/everything?q=${symbol}&language=en`),
-          fetch(`${PROXY}https://api.taapi.io/rsi?exchange=binance&symbol=${symbol}/USDT&interval=1h`),
-          fetch(`${PROXY}https://api.taapi.io/macd?exchange=binance&symbol=${symbol}/USDT&interval=1h`),
-          fetch(`${PROXY}https://lunarcrush.com/api3/coins?symbol=${symbol}`),
-          fetch(`${PROXY}https://developers.coinmarketcal.com/v1/events?coins=${symbol}`),
-          fetch(`${PROXY}https://api.tokenterminal.com/v2/projects/${symbol}/metrics/active_addresses_24h`)
+          fetch(`${PROXY}/proxy/news?q=${symbol}`),
+          fetch(`${PROXY}/proxy/rsi?symbol=${symbol}`),
+          fetch(`${PROXY}/proxy/macd?symbol=${symbol}`),
+          fetch(`${PROXY}/proxy/lunar?symbol=${symbol}`),
+          fetch(`${PROXY}/proxy/events?coins=${symbol}`),
+          fetch(`${PROXY}/proxy/onchain?symbol=${symbol}`)
         ]);
 
         const news = await newsRes.json();
@@ -107,15 +107,15 @@ async function fetchOpportunities() {
         const eventNote = hasEvent ? `Événement à venir: ${events.body[0].title}` : "";
 
         return {
-          name: symbol,
+          name: t.symbol.toUpperCase(),
           forecast: `+${forecast.toFixed(1)}%`,
           horizon: "2-4 jours",
           confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
           reason: article,
           extra: eventNote
         };
-      } catch (e) {
-        return { name: symbol, forecast: "+0.0%", confidence: "0.0", reason: "Erreur d’analyse IA", extra: "" };
+      } catch {
+        return { name: t.symbol.toUpperCase(), forecast: "+0.0%", confidence: "0.0", reason: "Erreur d’analyse IA", extra: "" };
       }
     }));
 
@@ -125,11 +125,11 @@ async function fetchOpportunities() {
       .forEach(e => {
         ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
       });
+
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
-
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
