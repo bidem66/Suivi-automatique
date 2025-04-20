@@ -65,25 +65,27 @@ async function addAsset() {
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
+  const allTickers = [];
 
-  let tickers = [];
-  for (let page = 1; page <= 10; page++) {
-    try {
-      const res = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=100&page=${page}`);
-      const data = await res.json();
-      tickers = tickers.concat(data);
-    } catch (e) {
-      console.error(`Erreur chargement page ${page}:`, e);
-    }
+  try {
+    // Étendre à 500 cryptos via 2 requêtes CoinGecko (250 max par page)
+    const [page1, page2] = await Promise.all([
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1"),
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
+    ]);
+    allTickers.push(...await page1.json(), ...await page2.json());
+  } catch {
+    ul.innerHTML = '<li>Erreur lors du chargement des cryptos CoinGecko</li>';
+    return;
   }
 
-  const enriched = await Promise.all(tickers.map(async t => {
+  const enriched = await Promise.all(allTickers.map(async t => {
     const id = t.id;
     const sym = t.symbol.toUpperCase();
-    let errorMsg = '';
-
     try {
-      const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
+      const [
+        newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes
+      ] = await Promise.all([
         fetch(`${PROXY}news?q=${id}`),
         fetch(`${PROXY}rsi?symbol=${sym}`),
         fetch(`${PROXY}macd?symbol=${sym}`),
@@ -91,10 +93,6 @@ async function fetchOpportunities() {
         fetch(`${PROXY}events?coins=${sym}`),
         fetch(`${PROXY}onchain?symbol=${t.symbol}`)
       ]);
-
-      if (!newsRes.ok || !rsiRes.ok || !macdRes.ok || !eventRes.ok || !onchainRes.ok) {
-        throw new Error(`Status → News: ${newsRes.status}, RSI: ${rsiRes.status}, MACD: ${macdRes.status}, Events: ${eventRes.status}, OnChain: ${onchainRes.status}`);
-      }
 
       const news = await newsRes.json();
       const rsiData = await rsiRes.json();
@@ -108,42 +106,46 @@ async function fetchOpportunities() {
       const socialScore = community.community_score || 30;
       const eventList = events?.body || events?.data || events || [];
       const hasEvent = Array.isArray(eventList) && eventList.length > 0;
-      const eventNote = hasEvent ? `Événement à venir: ${eventList[0].title || "Non spécifié"}` : "";
       const activeAddresses = onchain?.data?.value || 0;
 
       const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
-      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.3 : 1;
+      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
       const socialBoost = socialScore > 60 ? 1.2 : 1;
       const eventBoost = hasEvent ? 1.2 : 1;
       const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
 
       const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
       const article = news.articles[0]?.title || "Aucune info récente.";
+      const eventNote = hasEvent ? `Événement: ${eventList[0].title || "à venir"}` : "";
 
       return {
         name: sym,
         forecast,
-        forecastStr: `${forecast > 0 ? '+' : ''}${forecast.toFixed(1)}%`,
-        horizon: "1 à 4 semaines",
-        confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
-        reason: article,
+        article,
+        confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 10).toFixed(1),
         extra: eventNote
       };
-    } catch (e) {
-      errorMsg = e.message || "Erreur inconnue";
-      return { name: sym, forecast: 0, forecastStr: "+0.0%", confidence: "0.0", reason: `Erreur: ${errorMsg}`, extra: "Debug info visible", horizon: "?" };
+    } catch {
+      return null;
     }
   }));
 
   const filtered = enriched
-    .filter(e => e.forecast > 5)
+    .filter(e => e && e.forecast > 5)
     .sort((a, b) => b.forecast - a.forecast)
-    .slice(0, 3);
+    .slice(0, 5);
+
+  if (filtered.length === 0) {
+    ul.innerHTML = '<li>Aucune opportunité forte détectée.</li>';
+    return;
+  }
 
   filtered.forEach(e => {
-    ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecastStr} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+    const horizon = e.forecast > 30 ? "7-30 jours" : "3-7 jours";
+    ul.innerHTML += `<li><strong>${e.name}</strong> : +${e.forecast.toFixed(1)}% attendu d'ici ${horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.article}</em><br/>${e.extra}</li>`;
   });
-} 
+}
+
 
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
