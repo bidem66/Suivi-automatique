@@ -118,7 +118,7 @@ async function fetchOpportunities() {
       const boostScore = sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
       const forecast = (boostScore - 1) * 25;
 
-      if (forecast < 10) continue;
+      if (forecast < 5) continue;
 
       const why = [
         sentimentBoost > 1 ? "News récentes" : null,
@@ -142,7 +142,7 @@ async function fetchOpportunities() {
   enriched = enriched.sort((a, b) => b.forecast - a.forecast).slice(0, 5);
 
   if (enriched.length === 0) {
-    ul.innerHTML = '<li>Aucune opportunité forte détectée (forecast < 10%).</li>';
+    ul.innerHTML = '<li>Aucune opportunité forte détectée (forecast < 5%).</li>';
     return;
   }
 
