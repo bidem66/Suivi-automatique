@@ -108,7 +108,11 @@ async function fetchOpportunities() {
         const rsi = rsiData.value;
         const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
         const socialScore = community.community_score || 30;
-        const hasEvent = events?.body?.length > 0;
+
+        const eventList = events?.body || events?.data || events || [];
+        const hasEvent = Array.isArray(eventList) && eventList.length > 0;
+        const eventNote = hasEvent ? `Événement à venir: ${eventList[0].title || "Non spécifié"}` : "";
+
         const activeAddresses = onchain?.data?.value || 0;
 
         const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
@@ -119,7 +123,6 @@ async function fetchOpportunities() {
 
         const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
         const article = news.articles[0]?.title || "Aucune info récente.";
-        const eventNote = hasEvent ? `Événement à venir: ${events.body[0].title}` : "";
 
         return {
           name: sym,
