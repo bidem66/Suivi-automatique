@@ -1,4 +1,4 @@
-// script.js (modifié avec meilleure tolérance pour actions sans pc - previousClose)
+// script.js (modifié avec meilleure prévision IA pour opportunités)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
@@ -62,7 +62,6 @@ async function addAsset() {
   await refreshAll();
 }
 
-
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
@@ -70,8 +69,8 @@ async function fetchOpportunities() {
 
   try {
     const pages = await Promise.all([
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=1"),
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=250&page=2")
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1"),
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2")
     ]);
     for (const p of pages) allTickers.push(...await p.json());
   } catch {
@@ -113,8 +112,10 @@ async function fetchOpportunities() {
       const eventBoost = hasEvent ? 1.2 : 1;
       const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
 
-      const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
-      if (forecast < 15) continue; // SEUIL MINIMAL ICI
+      const boostScore = sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
+      const forecast = (boostScore - 1) * 25;
+
+      if (forecast < 10) continue;
 
       const article = news.articles[0]?.title || "Aucune info récente.";
       const eventNote = hasEvent ? `Événement: ${eventList[0].title || "à venir"}` : "";
@@ -132,7 +133,7 @@ async function fetchOpportunities() {
   }
 
   if (final.length === 0) {
-    ul.innerHTML = '<li>Aucune opportunité forte détectée (prévision < 15%).</li>';
+    ul.innerHTML = '<li>Aucune opportunité forte détectée (forecast < 10%).</li>';
     return;
   }
 
