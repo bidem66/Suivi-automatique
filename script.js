@@ -3,10 +3,9 @@
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
-
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`${PROXY}https://proxi-api-crypto.onrender.com/proxy/finnhub?symbol=${sym}`);
+    const res = await fetch(`${PROXY}finnhub?symbol=${sym}`);
     const data = await res.json();
     if (!data.c || data.c === 0) return null;
     const change = ((data.c - data.pc) / data.pc) * 100;
@@ -15,7 +14,6 @@ async function fetchAction(sym) {
     return null;
   }
 }
-
 async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
