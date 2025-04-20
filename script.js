@@ -57,7 +57,7 @@ async function addAsset() {
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value;
   if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-  const sym = symInput.toLowerCase();
+  const sym = symInput.toUpperCase();
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
