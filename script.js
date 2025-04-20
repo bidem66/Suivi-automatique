@@ -6,7 +6,7 @@ let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`${PROXY}finnhub?symbol=${sym}`);
+    const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
     const data = await res.json();
     const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
     return { price: data.c, change, currency: 'USD' };
