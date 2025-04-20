@@ -1,4 +1,4 @@
-// script.js (corrigé selon les API à passer par le proxy uniquement)
+// script.js (mise à jour avec remplacement de LunarCrush par CoinGecko community scores)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy?url=';
 const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
@@ -63,6 +63,7 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
+
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
@@ -71,28 +72,27 @@ async function fetchOpportunities() {
     const tickers = await res.json();
 
     const enriched = await Promise.all(tickers.map(async t => {
-      const symbol = t.id.toLowerCase(); // ex: 'bitcoin'
-
+      const id = t.id; // CoinGecko ID (ex: 'bitcoin')
       try {
-        const [newsRes, rsiRes, macdRes, socialRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}/proxy/news?q=${symbol}`),
-          fetch(`${PROXY}/proxy/rsi?symbol=${symbol}`),
-          fetch(`${PROXY}/proxy/macd?symbol=${symbol}`),
-          fetch(`${PROXY}/proxy/lunar?symbol=${symbol}`),
-          fetch(`${PROXY}/proxy/events?coins=${symbol}`),
-          fetch(`${PROXY}/proxy/onchain?symbol=${symbol}`)
+        const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
+          fetch(`${PROXY}https://newsapi.org/v2/everything?q=${id}&language=en`),
+          fetch(`${PROXY}https://api.taapi.io/rsi?exchange=binance&symbol=${t.symbol.toUpperCase()}/USDT&interval=1h`),
+          fetch(`${PROXY}https://api.taapi.io/macd?exchange=binance&symbol=${t.symbol.toUpperCase()}/USDT&interval=1h`),
+          fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
+          fetch(`${PROXY}https://developers.coinmarketcal.com/v1/events?coins=${t.symbol.toUpperCase()}`),
+          fetch(`${PROXY}https://api.tokenterminal.com/v2/projects/${t.symbol}/metrics/active_addresses_24h`)
         ]);
 
         const news = await newsRes.json();
         const rsiData = await rsiRes.json();
         const macdData = await macdRes.json();
-        const social = await socialRes.json();
+        const community = await communityRes.json();
         const events = await eventRes.json();
         const onchain = await onchainRes.json();
 
         const rsi = rsiData.value;
         const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const socialScore = social?.data?.[0]?.galaxy_score || 30;
+        const socialScore = community.community_score || 30;
         const hasEvent = events?.body?.length > 0;
         const activeAddresses = onchain?.data?.value || 0;
 
@@ -114,7 +114,7 @@ async function fetchOpportunities() {
           reason: article,
           extra: eventNote
         };
-      } catch {
+      } catch (e) {
         return { name: t.symbol.toUpperCase(), forecast: "+0.0%", confidence: "0.0", reason: "Erreur d’analyse IA", extra: "" };
       }
     }));
@@ -125,7 +125,6 @@ async function fetchOpportunities() {
       .forEach(e => {
         ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
       });
-
   } catch {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
