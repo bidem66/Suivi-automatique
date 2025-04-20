@@ -1,13 +1,12 @@
-// script.js (mise à jour avec remplacement de LunarCrush par CoinGecko community scores)
+// script.js (modifié avec suppression de la clé FINNHUB dans le frontend)
 
-const PROXY = 'https://proxi-api-crypto.onrender.com/proxy?url=';
-const FINNHUB_KEY = 'd012dp1r01qv3oh29bi0d012dp1r01qv3oh29big';
+const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`${PROXY}https://finnhub.io/api/v1/quote?symbol=${sym}&token=${FINNHUB_KEY}`);
+    const res = await fetch(`${PROXY}finnhub?symbol=${sym}`);
     const data = await res.json();
     if (!data.c || data.c === 0) return null;
     const change = ((data.c - data.pc) / data.pc) * 100;
@@ -72,15 +71,15 @@ async function fetchOpportunities() {
     const tickers = await res.json();
 
     const enriched = await Promise.all(tickers.map(async t => {
-      const id = t.id; // CoinGecko ID (ex: 'bitcoin')
+      const id = t.id;
       try {
         const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}https://newsapi.org/v2/everything?q=${id}&language=en`),
-          fetch(`${PROXY}https://api.taapi.io/rsi?exchange=binance&symbol=${t.symbol.toUpperCase()}/USDT&interval=1h`),
-          fetch(`${PROXY}https://api.taapi.io/macd?exchange=binance&symbol=${t.symbol.toUpperCase()}/USDT&interval=1h`),
+          fetch(`${PROXY}news?q=${id}`),
+          fetch(`${PROXY}rsi?symbol=${t.symbol.toUpperCase()}`),
+          fetch(`${PROXY}macd?symbol=${t.symbol.toUpperCase()}`),
           fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
-          fetch(`${PROXY}https://developers.coinmarketcal.com/v1/events?coins=${t.symbol.toUpperCase()}`),
-          fetch(`${PROXY}https://api.tokenterminal.com/v2/projects/${t.symbol}/metrics/active_addresses_24h`)
+          fetch(`${PROXY}events?coins=${t.symbol.toUpperCase()}`),
+          fetch(`${PROXY}onchain?symbol=${t.symbol}`)
         ]);
 
         const news = await newsRes.json();
@@ -129,6 +128,7 @@ async function fetchOpportunities() {
     ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
   }
 }
+
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
