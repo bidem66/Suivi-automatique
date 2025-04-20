@@ -109,20 +109,21 @@ async function fetchOpportunities() {
         const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
         const socialScore = community.community_score || 30;
 
-        const eventList = events?.body || events?.data || events || [];
+        const eventList = events?.body || events?.data || [];
         const hasEvent = Array.isArray(eventList) && eventList.length > 0;
-        const eventNote = hasEvent ? `Événement à venir: ${eventList[0].title || "Non spécifié"}` : "";
+        const eventNote = hasEvent ? `Événement à venir: ${eventList[0]?.title || "Non spécifié"}` : "";
 
         const activeAddresses = onchain?.data?.value || 0;
 
-        const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
+        const sentimentBoost = Array.isArray(news?.articles) && news.articles.length > 0 ? 1.2 : 1;
+        const article = Array.isArray(news?.articles) && news.articles.length > 0 ? news.articles[0].title : "Aucune info récente.";
+
         const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
         const socialBoost = socialScore > 60 ? 1.2 : 1;
         const eventBoost = hasEvent ? 1.2 : 1;
         const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
 
         const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
-        const article = news.articles[0]?.title || "Aucune info récente.";
 
         return {
           name: sym,
