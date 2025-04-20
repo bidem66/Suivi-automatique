@@ -66,90 +66,84 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
 
-  try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1");
-    const tickers = await res.json();
-
-    const enriched = await Promise.all(tickers.map(async t => {
-      const id = t.id;
-      const sym = t.symbol.toUpperCase();
-      let reasonDetails = [];
-
-      try {
-        const [
-          newsRes,
-          rsiRes,
-          macdRes,
-          communityRes,
-          eventRes,
-          onchainRes
-        ] = await Promise.all([
-          fetch(`${PROXY}news?q=${id}`),
-          fetch(`${PROXY}rsi?symbol=${sym}`),
-          fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
-          fetch(`${PROXY}events?coins=${sym}`),
-          fetch(`${PROXY}onchain?symbol=${t.symbol}`)
-        ]);
-
-        const news = await newsRes.json();
-        const rsiData = await rsiRes.json();
-        const macdData = await macdRes.json();
-        const community = await communityRes.json();
-        const events = await eventRes.json();
-        const onchain = await onchainRes.json();
-
-        const rsi = rsiData.value;
-        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const socialScore = community.community_score || 30;
-
-        const eventList = events?.body || events?.data || events || [];
-        const hasEvent = Array.isArray(eventList) && eventList.length > 0;
-        const eventNote = hasEvent ? `Événement à venir: ${eventList[0].title || "Non spécifié"}` : "";
-
-        const activeAddresses = onchain?.data?.value || 0;
-
-        const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
-        const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
-        const socialBoost = socialScore > 60 ? 1.2 : 1;
-        const eventBoost = hasEvent ? 1.2 : 1;
-        const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
-
-        if (sentimentBoost > 1) reasonDetails.push("News récentes positives");
-        if (indicatorBoost > 1) reasonDetails.push("RSI bas et MACD haussier");
-        if (socialBoost > 1) reasonDetails.push("Score social élevé");
-        if (eventBoost > 1) reasonDetails.push("Événement prévu");
-        if (onchainBoost > 1) reasonDetails.push("Activité on-chain importante");
-
-        const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
-        const article = news.articles[0]?.title || "Aucune info récente.";
-
-        return {
-          name: sym,
-          forecast: `+${forecast.toFixed(1)}%`,
-          horizon: "7 jours",
-          confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
-          reason: reasonDetails.join(", "),
-          extra: `${eventNote}<br/><em>${article}</em>`
-        };
-      } catch (e) {
-        return { name: sym, forecast: "+0.0%", confidence: "0.0", reason: `Erreur: ${e.message}`, extra: "Debug info visible" };
-      }
-    }));
-
-    const topOpportunities = enriched
-      .filter(e => parseFloat(e.confidence) >= 5 && parseFloat(e.forecast) > 0)
-      .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
-      .slice(0, 3);
-
-    topOpportunities.forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} prévu dans les ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/>Pourquoi IA recommande: ${e.reason}<br/>${e.extra}</li>`;
-    });
-  } catch {
-    ul.innerHTML = '<li>Erreur globale lors de la récupération des opportunités</li>';
+  let tickers = [];
+  for (let page = 1; page <= 10; page++) {
+    try {
+      const res = await fetch(`https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=100&page=${page}`);
+      const data = await res.json();
+      tickers = tickers.concat(data);
+    } catch (e) {
+      console.error(`Erreur chargement page ${page}:`, e);
+    }
   }
-}
 
+  const enriched = await Promise.all(tickers.map(async t => {
+    const id = t.id;
+    const sym = t.symbol.toUpperCase();
+    let errorMsg = '';
+
+    try {
+      const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
+        fetch(`${PROXY}news?q=${id}`),
+        fetch(`${PROXY}rsi?symbol=${sym}`),
+        fetch(`${PROXY}macd?symbol=${sym}`),
+        fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
+        fetch(`${PROXY}events?coins=${sym}`),
+        fetch(`${PROXY}onchain?symbol=${t.symbol}`)
+      ]);
+
+      if (!newsRes.ok || !rsiRes.ok || !macdRes.ok || !eventRes.ok || !onchainRes.ok) {
+        throw new Error(`Status → News: ${newsRes.status}, RSI: ${rsiRes.status}, MACD: ${macdRes.status}, Events: ${eventRes.status}, OnChain: ${onchainRes.status}`);
+      }
+
+      const news = await newsRes.json();
+      const rsiData = await rsiRes.json();
+      const macdData = await macdRes.json();
+      const community = await communityRes.json();
+      const events = await eventRes.json();
+      const onchain = await onchainRes.json();
+
+      const rsi = rsiData.value;
+      const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+      const socialScore = community.community_score || 30;
+      const eventList = events?.body || events?.data || events || [];
+      const hasEvent = Array.isArray(eventList) && eventList.length > 0;
+      const eventNote = hasEvent ? `Événement à venir: ${eventList[0].title || "Non spécifié"}` : "";
+      const activeAddresses = onchain?.data?.value || 0;
+
+      const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
+      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.3 : 1;
+      const socialBoost = socialScore > 60 ? 1.2 : 1;
+      const eventBoost = hasEvent ? 1.2 : 1;
+      const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
+
+      const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
+      const article = news.articles[0]?.title || "Aucune info récente.";
+
+      return {
+        name: sym,
+        forecast,
+        forecastStr: `${forecast > 0 ? '+' : ''}${forecast.toFixed(1)}%`,
+        horizon: "1 à 4 semaines",
+        confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
+        reason: article,
+        extra: eventNote
+      };
+    } catch (e) {
+      errorMsg = e.message || "Erreur inconnue";
+      return { name: sym, forecast: 0, forecastStr: "+0.0%", confidence: "0.0", reason: `Erreur: ${errorMsg}`, extra: "Debug info visible", horizon: "?" };
+    }
+  }));
+
+  const filtered = enriched
+    .filter(e => e.forecast > 5)
+    .sort((a, b) => b.forecast - a.forecast)
+    .slice(0, 3);
+
+  filtered.forEach(e => {
+    ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecastStr} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+  });
+} 
 
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
