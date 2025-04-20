@@ -1,4 +1,4 @@
-// script.js (modifié avec meilleure prévision IA pour opportunités)
+// script.js (modifié avec meilleures prévisions IA pour opportunités)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
@@ -70,7 +70,9 @@ async function fetchOpportunities() {
   try {
     const pages = await Promise.all([
       fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1"),
-      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2")
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=2"),
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=3"),
+      fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=4")
     ]);
     for (const p of pages) allTickers.push(...await p.json());
   } catch {
@@ -78,7 +80,8 @@ async function fetchOpportunities() {
     return;
   }
 
-  let final = [];
+  let enriched = [];
+
   for (const t of allTickers) {
     try {
       const id = t.id;
@@ -117,29 +120,35 @@ async function fetchOpportunities() {
 
       if (forecast < 10) continue;
 
-      const article = news.articles[0]?.title || "Aucune info récente.";
-      const eventNote = hasEvent ? `Événement: ${eventList[0].title || "à venir"}` : "";
+      const why = [
+        sentimentBoost > 1 ? "News récentes" : null,
+        indicatorBoost > 1 ? "RSI < 30 + MACD positif" : null,
+        socialBoost > 1 ? "Communauté très active" : null,
+        eventBoost > 1 ? "Événement à venir" : null,
+        onchainBoost > 1 ? "Activité on-chain élevée" : null
+      ].filter(Boolean).join(', ');
 
-      final.push({
+      enriched.push({
         name: sym,
         forecast,
-        article,
+        article: news.articles[0]?.title || "Aucune info récente.",
         confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 10).toFixed(1),
-        extra: eventNote
+        extra: hasEvent ? `Événement: ${eventList[0].title || "à venir"}` : '',
+        why
       });
-
-      if (final.length >= 5) break;
     } catch {}
   }
 
-  if (final.length === 0) {
+  enriched = enriched.sort((a, b) => b.forecast - a.forecast).slice(0, 5);
+
+  if (enriched.length === 0) {
     ul.innerHTML = '<li>Aucune opportunité forte détectée (forecast < 10%).</li>';
     return;
   }
 
-  final.forEach(e => {
+  enriched.forEach(e => {
     const horizon = e.forecast > 30 ? "7-30 jours" : "3-7 jours";
-    ul.innerHTML += `<li><strong>${e.name}</strong> : +${e.forecast.toFixed(1)}% attendu d'ici ${horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.article}</em><br/>${e.extra}</li>`;
+    ul.innerHTML += `<li><strong>${e.name}</strong> : +${e.forecast.toFixed(1)}% attendu d'ici ${horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.article}</em><br/>${e.extra}<br/><small>Facteurs: ${e.why}</small></li>`;
   });
 }
 
