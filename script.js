@@ -62,23 +62,33 @@ async function addAsset() {
   await refreshAll();
 }
 
-
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
+
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=10&page=1");
+    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=3&page=1");
     const tickers = await res.json();
 
     const enriched = await Promise.all(tickers.map(async t => {
       const id = t.id;
+      const sym = t.symbol.toUpperCase();
+      let errorMsg = '';
+
       try {
-        const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
+        const [
+          newsRes,
+          rsiRes,
+          macdRes,
+          communityRes,
+          eventRes,
+          onchainRes
+        ] = await Promise.all([
           fetch(`${PROXY}news?q=${id}`),
-          fetch(`${PROXY}rsi?symbol=${t.symbol.toUpperCase()}`),
-          fetch(`${PROXY}macd?symbol=${t.symbol.toUpperCase()}`),
+          fetch(`${PROXY}rsi?symbol=${sym}`),
+          fetch(`${PROXY}macd?symbol=${sym}`),
           fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
-          fetch(`${PROXY}events?coins=${t.symbol.toUpperCase()}`),
+          fetch(`${PROXY}events?coins=${sym}`),
           fetch(`${PROXY}onchain?symbol=${t.symbol}`)
         ]);
 
@@ -106,7 +116,7 @@ async function fetchOpportunities() {
         const eventNote = hasEvent ? `Événement à venir: ${events.body[0].title}` : "";
 
         return {
-          name: t.symbol.toUpperCase(),
+          name: sym,
           forecast: `+${forecast.toFixed(1)}%`,
           horizon: "2-4 jours",
           confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
@@ -114,18 +124,16 @@ async function fetchOpportunities() {
           extra: eventNote
         };
       } catch (e) {
-        return { name: t.symbol.toUpperCase(), forecast: "+0.0%", confidence: "0.0", reason: "Erreur d’analyse IA", extra: "" };
+        errorMsg = e.message || "Erreur inconnue";
+        return { name: sym, forecast: "+0.0%", confidence: "0.0", reason: `Erreur: ${errorMsg}`, extra: "Debug info visible" };
       }
     }));
 
-    enriched
-      .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
-      .slice(0, 3)
-      .forEach(e => {
-        ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
-      });
+    enriched.forEach(e => {
+      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon || "?"}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+    });
   } catch {
-    ul.innerHTML = '<li>Erreur de récupération des opportunités</li>';
+    ul.innerHTML = '<li>Erreur globale lors de la récupération des opportunités</li>';
   }
 }
 
