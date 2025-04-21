@@ -1,4 +1,5 @@
-// script.js (modifié pour proxy CoinGecko, seuil opportunités abaissé à 1%, logs debug et catch(err))
+// script.js (version v2)
+// Proxy, seuil opportunités abaissé à 1%, logs debug et catch(err)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
