@@ -1,5 +1,4 @@
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
-
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
@@ -62,17 +61,19 @@ async function addAsset() {
 
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
-  ul.innerHTML = '';
+  ul.innerHTML = '<li>Analyse IA en cours sur 250+ cryptos...</li>';
 
   try {
     const res = await fetch(`${PROXY}coinpaprika`);
     const all = await res.json();
-    const top = all
+    const filtered = all
       .filter(c => c.quotes?.USD?.percent_change_24h)
       .sort((a, b) => b.quotes.USD.percent_change_24h - a.quotes.USD.percent_change_24h)
-      .slice(0, 5);
+      .slice(0, 20);
 
-    const enriched = await Promise.all(top.map(async t => {
+    const enriched = [];
+
+    for (const t of filtered) {
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
 
@@ -102,29 +103,28 @@ async function fetchOpportunities() {
         const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
 
         const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
-        const article = news.articles[0]?.title || "Aucune info récente.";
-        const eventNote = hasEvent ? `Événement: ${events.body[0].title}` : "";
+        const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
 
-        return {
+        enriched.push({
           name: sym,
           forecast: `+${forecast.toFixed(1)}%`,
           horizon: "2-4 jours",
-          confidence: ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1),
-          reason: article,
-          extra: eventNote
-        };
+          confidence,
+          reason: news.articles[0]?.title || "Aucune info récente.",
+          extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
+        });
       } catch (e) {
-        console.warn(`Erreur enrichissement IA pour ${sym}`, e);
-        return null;
+        console.warn(`Échec enrichissement pour ${sym}`);
       }
-    }));
+    }
 
-    enriched.filter(Boolean).forEach(e => {
+    ul.innerHTML = '';
+    enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
   } catch (err) {
     console.error("Erreur globale CoinPaprika", err);
-    ul.innerHTML = '<li>Erreur lors du chargement des opportunités.</li>';
+    ul.innerHTML = '<li>Erreur lors de l\'analyse des opportunités.</li>';
   }
 }
 
@@ -176,5 +176,4 @@ async function refreshAll() {
 
 window.onload = () => {
   refreshAll();
-  setInterval(refreshAll, 60000);
 };
