@@ -73,16 +73,14 @@ async function fetchOpportunities() {
       .slice(0, 5);
 
     const enriched = await Promise.all(top.map(async t => {
-      const id = t.id;
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
 
       try {
-        const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
+        const [newsRes, rsiRes, macdRes, eventRes, onchainRes] = await Promise.all([
           fetch(`${PROXY}news?q=${name}`),
           fetch(`${PROXY}rsi?symbol=${sym}`),
           fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`${PROXY}coingecko?endpoint=coins/${id}`),
           fetch(`${PROXY}events?coins=${sym}`),
           fetch(`${PROXY}onchain?symbol=${t.symbol}`)
         ]);
@@ -90,23 +88,20 @@ async function fetchOpportunities() {
         const news = await newsRes.json();
         const rsiData = await rsiRes.json();
         const macdData = await macdRes.json();
-        const community = await communityRes.json();
         const events = await eventRes.json();
         const onchain = await onchainRes.json();
 
         const rsi = rsiData.value;
         const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const socialScore = community.community_score || 30;
         const hasEvent = events?.body?.length > 0;
         const activeAddresses = onchain?.data?.value || 0;
 
         const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
         const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
-        const socialBoost = socialScore > 60 ? 1.2 : 1;
         const eventBoost = hasEvent ? 1.2 : 1;
         const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
 
-        const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
+        const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
         const article = news.articles[0]?.title || "Aucune info récente.";
         const eventNote = hasEvent ? `Événement: ${events.body[0].title}` : "";
 
@@ -114,7 +109,7 @@ async function fetchOpportunities() {
           name: sym,
           forecast: `+${forecast.toFixed(1)}%`,
           horizon: "2-4 jours",
-          confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
+          confidence: ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1),
           reason: article,
           extra: eventNote
         };
