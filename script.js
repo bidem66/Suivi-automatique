@@ -1,4 +1,4 @@
-// script.js (modifié pour proxy CoinGecko, seuil opportunités abaissé à 1%, logs debug)
+// script.js (modifié pour proxy CoinGecko, seuil opportunités abaissé à 1%, logs debug et catch(err))
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
@@ -6,7 +6,7 @@ let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
+    const res  = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
     const data = await res.json();
     const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
     return { price: data.c, change, currency: 'USD' };
@@ -17,7 +17,7 @@ async function fetchAction(sym) {
 
 async function fetchExchangeRate() {
   try {
-    const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
+    const res  = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
     const data = await res.json();
     return data.rates?.CAD || 1.35;
   } catch {
@@ -28,10 +28,10 @@ async function fetchExchangeRate() {
 async function fetchCrypto(sym, curr) {
   try {
     const symbolPair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
-    const data = await res.json();
-    const usdPrice = parseFloat(data.lastPrice);
-    const usdChange = parseFloat(data.priceChangePercent);
+    const res         = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
+    const data        = await res.json();
+    const usdPrice    = parseFloat(data.lastPrice);
+    const usdChange   = parseFloat(data.priceChangePercent);
     if (curr.toUpperCase() === 'CAD') {
       const rate = await fetchExchangeRate();
       return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
@@ -50,12 +50,16 @@ function removeAsset() {
 }
 
 async function addAsset() {
-  const type = document.getElementById('type').value;
+  const type     = document.getElementById('type').value;
   const symInput = document.getElementById('symbol').value.trim();
-  const qty = parseFloat(document.getElementById('quantity').value);
-  const inv = parseFloat(document.getElementById('invested').value);
-  const curr = document.getElementById('devise').value.toUpperCase();
-  if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
+  const qty      = parseFloat(document.getElementById('quantity').value);
+  const inv      = parseFloat(document.getElementById('invested').value);
+  const curr     = document.getElementById('devise').value.toUpperCase();
+
+  if (!symInput || !qty || !inv) {
+    return alert('Tous les champs sont requis.');
+  }
+
   const sym = symInput.toUpperCase();
   portfolio.push({ type, sym, qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
@@ -74,9 +78,12 @@ async function fetchOpportunities() {
       fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=3`),
       fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=4`)
     ]);
-    for (const p of pages) allTickers.push(...await p.json());
-  } catch {
-    ul.innerHTML = '<li>Erreur lors du chargement des cryptos CoinGecko</li>';
+    for (const p of pages) {
+      allTickers.push(...await p.json());
+    }
+  } catch (err) {
+    console.error("Fetch CoinGecko error:", err);
+    ul.innerHTML = `<li>Erreur CoinGecko : ${err.message}</li>`;
     return;
   }
 
