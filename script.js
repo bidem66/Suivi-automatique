@@ -1,5 +1,3 @@
-// script.js (intégration proxy CoinGecko + prévision enrichie)
-
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -66,67 +64,88 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
 
+  let tickers = [];
+
+  // 1. Essayer CoinGecko
   try {
-    const pages = await Promise.all([
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=percent_change_24h_desc&per_page=5&page=1`)
-    ]);
-    const tickers = await pages[0].json();
+    const res = await fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=percent_change_24h_desc&per_page=5&page=1`);
+    tickers = await res.json();
+  } catch (e) {
+    console.warn("CoinGecko down, fallback sur CoinPaprika");
 
-    const enriched = await Promise.all(tickers.map(async t => {
-      const id = t.id;
-      const sym = t.symbol.toUpperCase();
-      try {
-        const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}news?q=${id}`),
-          fetch(`${PROXY}rsi?symbol=${sym}`),
-          fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`${PROXY}coingecko?endpoint=coins/${id}`),
-          fetch(`${PROXY}events?coins=${sym}`),
-          fetch(`${PROXY}onchain?symbol=${t.symbol}`)
-        ]);
-
-        const news = await newsRes.json();
-        const rsiData = await rsiRes.json();
-        const macdData = await macdRes.json();
-        const community = await communityRes.json();
-        const events = await eventRes.json();
-        const onchain = await onchainRes.json();
-
-        const rsi = rsiData.value;
-        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const socialScore = community.community_score || 30;
-        const hasEvent = events?.body?.length > 0;
-        const activeAddresses = onchain?.data?.value || 0;
-
-        const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
-        const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
-        const socialBoost = socialScore > 60 ? 1.2 : 1;
-        const eventBoost = hasEvent ? 1.2 : 1;
-        const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
-
-        const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
-        const article = news.articles[0]?.title || "Aucune info récente.";
-        const eventNote = hasEvent ? `Événement: ${events.body[0].title}` : "";
-
-        return {
-          name: sym,
-          forecast: `+${forecast.toFixed(1)}%`,
-          horizon: "2-4 jours",
-          confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
-          reason: article,
-          extra: eventNote
-        };
-      } catch {
-        return null;
-      }
-    }));
-
-    enriched.filter(Boolean).forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
-    });
-  } catch {
-    ul.innerHTML = '<li>Erreur globale lors de la récupération des opportunités</li>';
+    // 2. Fallback CoinPaprika
+    try {
+      const res = await fetch(`${PROXY}coinpaprika`);
+      const all = await res.json();
+      tickers = all
+        .filter(c => c.quotes?.USD?.percent_change_24h)
+        .sort((a, b) => b.quotes.USD.percent_change_24h - a.quotes.USD.percent_change_24h)
+        .slice(0, 5)
+        .map(c => ({
+          id: c.id,
+          symbol: c.symbol,
+          price_change_percentage_24h: c.quotes.USD.percent_change_24h
+        }));
+    } catch (err) {
+      console.error("Échec CoinPaprika aussi", err);
+      ul.innerHTML = '<li>Erreur globale : impossible de charger les opportunités</li>';
+      return;
+    }
   }
+
+  // Enrichir avec IA
+  const enriched = await Promise.all(tickers.map(async t => {
+    const id = t.id;
+    const sym = t.symbol.toUpperCase();
+    try {
+      const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
+        fetch(`${PROXY}news?q=${id}`),
+        fetch(`${PROXY}rsi?symbol=${sym}`),
+        fetch(`${PROXY}macd?symbol=${sym}`),
+        fetch(`${PROXY}coingecko?endpoint=coins/${id}`),
+        fetch(`${PROXY}events?coins=${sym}`),
+        fetch(`${PROXY}onchain?symbol=${t.symbol}`)
+      ]);
+
+      const news = await newsRes.json();
+      const rsiData = await rsiRes.json();
+      const macdData = await macdRes.json();
+      const community = await communityRes.json();
+      const events = await eventRes.json();
+      const onchain = await onchainRes.json();
+
+      const rsi = rsiData.value;
+      const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+      const socialScore = community.community_score || 30;
+      const hasEvent = events?.body?.length > 0;
+      const activeAddresses = onchain?.data?.value || 0;
+
+      const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
+      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
+      const socialBoost = socialScore > 60 ? 1.2 : 1;
+      const eventBoost = hasEvent ? 1.2 : 1;
+      const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
+
+      const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
+      const article = news.articles[0]?.title || "Aucune info récente.";
+      const eventNote = hasEvent ? `Événement: ${events.body[0].title}` : "";
+
+      return {
+        name: sym,
+        forecast: `+${forecast.toFixed(1)}%`,
+        horizon: "2-4 jours",
+        confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 5).toFixed(1),
+        reason: article,
+        extra: eventNote
+      };
+    } catch {
+      return null;
+    }
+  }));
+
+  enriched.filter(Boolean).forEach(e => {
+    ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+  });
 }
 
 async function refreshAll() {
