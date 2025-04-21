@@ -1,15 +1,20 @@
-// script.js (version v2)
-// Proxy, seuil opportunités abaissé à 1%, logs debug et catch(err)
+// script.js v3
+// - safeFetch pour charger chaque page CoinGecko indépendamment
+// - skip des pages en erreur sans tout stopper
+// - logs détaillés + catch(err) avec messages clairs
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
+// API helpers inchangés...
 async function fetchAction(sym) {
   try {
     const res  = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
     const data = await res.json();
-    const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
+    const change = data.pc && data.pc !== 0
+      ? ((data.c - data.pc) / data.pc) * 100
+      : 0;
     return { price: data.c, change, currency: 'USD' };
   } catch {
     return null;
@@ -28,11 +33,10 @@ async function fetchExchangeRate() {
 
 async function fetchCrypto(sym, curr) {
   try {
-    const symbolPair = sym.toUpperCase() + 'USDT';
-    const res         = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
-    const data        = await res.json();
-    const usdPrice    = parseFloat(data.lastPrice);
-    const usdChange   = parseFloat(data.priceChangePercent);
+    const res  = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}USDT`);
+    const data = await res.json();
+    const usdPrice  = parseFloat(data.lastPrice);
+    const usdChange = parseFloat(data.priceChangePercent);
     if (curr.toUpperCase() === 'CAD') {
       const rate = await fetchExchangeRate();
       return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
@@ -61,30 +65,43 @@ async function addAsset() {
     return alert('Tous les champs sont requis.');
   }
 
-  const sym = symInput.toUpperCase();
-  portfolio.push({ type, sym, qty, inv, curr });
+  portfolio.push({ type, sym: symInput.toUpperCase(), qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
+}
+
+// safeFetch : renvoie null en cas d'erreur, logue l'erreur
+async function safeFetch(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`status ${res.status}`);
+    }
+    return await res.json();
+  } catch (err) {
+    console.error(`safeFetch error pour ${url}`, err);
+    return null;
+  }
 }
 
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '';
-  const allTickers = [];
 
-  try {
-    const pages = await Promise.all([
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=1`),
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=2`),
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=3`),
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=4`)
-    ]);
-    for (const p of pages) {
-      allTickers.push(...await p.json());
-    }
-  } catch (err) {
-    console.error("Fetch CoinGecko error:", err);
-    ul.innerHTML = `<li>Erreur CoinGecko : ${err.message}</li>`;
+  // Construire les URLs pour les pages
+  const urls = [1,2,3,4].map(page =>
+    `${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=${page}`
+  );
+
+  // Charger chaque page en safeFetch
+  const pagesData = await Promise.all(urls.map(u => safeFetch(u)));
+  // Aplatir les tableaux valides
+  const allTickers = pagesData
+    .filter(d => Array.isArray(d))
+    .flat();
+
+  if (!allTickers.length) {
+    ul.innerHTML = '<li>Erreur CoinGecko : impossible de récupérer aucune page.</li>';
     return;
   }
 
@@ -95,6 +112,7 @@ async function fetchOpportunities() {
       const id  = t.id;
       const sym = t.symbol.toUpperCase();
 
+      // Appels IA / news / TA / on-chain
       const [
         newsRes,
         rsiRes,
@@ -118,11 +136,12 @@ async function fetchOpportunities() {
       const events    = await eventRes.json();
       const onchain   = await onchainRes.json();
 
+      // Calcul des boosts
       const rsi           = rsiData.value;
       const macdSignal    = macdData.valueMACD - macdData.valueMACDSignal;
       const socialScore   = community.community_score || 30;
       const eventList     = events?.body || events?.data || [];
-      const hasEvent      = Array.isArray(eventList) && eventList.length > 0;
+      const hasEvent      = eventList.length > 0;
       const activeAddress = onchain?.data?.value || 0;
 
       const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
@@ -137,31 +156,30 @@ async function fetchOpportunities() {
       // Seuil abaissé à 1%
       if (forecast < 1) continue;
 
-      // Logs debug
       console.log(
         `[OPP] ${sym}: forecast=${forecast.toFixed(1)}%`,
         `boosts={news:${sentimentBoost}, RSI+MACD:${indicatorBoost}, social:${socialBoost}, event:${eventBoost}, onchain:${onchainBoost}}`
       );
 
-      const why = [
-        sentimentBoost > 1 ? "News récentes" : null,
-        indicatorBoost > 1 ? "RSI < 30 + MACD positif" : null,
-        socialBoost > 1    ? "Communauté très active" : null,
-        eventBoost > 1     ? "Événement à venir" : null,
-        onchainBoost > 1   ? "Activité on-chain élevée" : null
-      ].filter(Boolean).join(', ');
+      const whyArr = [
+        sentimentBoost > 1 ? "News récentes"        : null,
+        indicatorBoost > 1 ? "RSI < 30 + MACD positif": null,
+        socialBoost > 1    ? "Communauté active"     : null,
+        eventBoost > 1     ? "Événement à venir"     : null,
+        onchainBoost > 1   ? "Activité on-chain élevée": null
+      ].filter(Boolean);
 
       enriched.push({
         name:       sym,
         forecast,
-        article:    news.articles[0]?.title || "Aucune info récente.",
-        confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost) / 5 * 10).toFixed(1),
-        extra:      hasEvent ? `Événement: ${eventList[0].title || "à venir"}` : '',
-        why
+        article:    news.articles[0]?.title || "Pas d'info récente",
+        confidence: ((sentimentBoost + indicatorBoost + socialBoost + eventBoost + onchainBoost)/5*10).toFixed(1),
+        extra:      hasEvent ? `Événement: ${eventList[0].title}` : '',
+        why:        whyArr.join(', ')
       });
 
     } catch (err) {
-      console.error("fetchOpportunities error for", t.symbol, err);
+      console.error("Erreur enrichment pour", t.symbol, err);
     }
   }
 
@@ -178,7 +196,7 @@ async function fetchOpportunities() {
     const horizon = e.forecast > 30 ? "7-30 jours" : "3-7 jours";
     ul.innerHTML += `
       <li>
-        <strong>${e.name}</strong> : +${e.forecast.toFixed(1)}% attendu d'ici ${horizon}<br/>
+        <strong>${e.name}</strong> : +${e.forecast.toFixed(1)}% d'ici ${horizon}<br/>
         Confiance IA: ${e.confidence}/10<br/>
         <em>${e.article}</em><br/>
         ${e.extra}<br/>
@@ -197,12 +215,12 @@ async function refreshAll() {
   let inv = 0, val = 0;
 
   const enriched = await Promise.all(
-    portfolio.map(async (a) => {
-      const info = a.type === 'crypto'
-        ? await fetchCrypto(a.sym, a.curr)
-        : await fetchAction(a.sym);
-      return { ...a, info };
-    })
+    portfolio.map(async (a) => ({
+      ...a,
+      info: a.type === 'crypto' 
+        ? await fetchCrypto(a.sym, a.curr) 
+        : await fetchAction(a.sym)
+    }))
   );
 
   const sorted = enriched
@@ -213,12 +231,9 @@ async function refreshAll() {
     const info   = a.info;
     const value  = info.price * a.qty;
     const gain   = value - a.inv;
-    const change = info.change?.toFixed(2) || "0.00";
-    const gainClass = gain >= 0 ? 'gain' : 'perte';
-    const sign      = gain >= 0 ? '+' : '-';
-
-    inv += a.inv;
-    val += value;
+    const pct    = info.change?.toFixed(2) || "0.00";
+    inv  += a.inv;
+    val  += value;
 
     const row = `
       <tr>
@@ -227,21 +242,21 @@ async function refreshAll() {
         <td>${a.inv.toFixed(2)}</td>
         <td>${info.price.toFixed(2)}</td>
         <td>${value.toFixed(2)}</td>
-        <td class="${gainClass}">${sign}${Math.abs(change)}%</td>
+        <td class="${gain>=0?'gain':'perte'}">${gain>=0?'+':''}${pct}%</td>
         <td>${info.currency}</td>
       </tr>`;
-    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+    (a.type==='crypto'?tbodyC:tbodyA).innerHTML += row;
     advice.innerHTML += `<li><strong>${a.sym}</strong> : ${
-      gain >= 20 ? 'Vendre' :
-      gain <= -15 ? 'À risque' :
-      'Garder'
+      gain>=20   ? 'Vendre' :
+      gain<=-15  ? 'À risque' :
+                   'Garder'
     }</li>`;
   }
 
   const totalGain = val - inv;
-  const totalPct  = inv ? (totalGain / inv * 100).toFixed(2) : "0.00";
+  const totalPct  = inv ? (totalGain/inv*100).toFixed(2) : "0.00";
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color = totalGain >= 0 ? 'green' : 'red';
+  perf.style.color = totalGain>=0?'green':'red';
 
   await fetchOpportunities();
 }
