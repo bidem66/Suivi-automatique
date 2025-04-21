@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=0.85" />
+  <title>Dashboard Portefeuille</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f5f7fa;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1, h2 { text-align: center; }
+    .controls, table {
+      max-width: 1000px;
+      width: 100%;
+      margin: 20px 0;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+    }
+    .controls input, .controls select, .controls button {
+      padding: 10px;
+      margin: 5px;
+      width: 100%;
+    }
+    table {
+      border-collapse: collapse;
+      background: #fff;
+      font-size: 0.75rem;
+      zoom: 0.75;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 4px;
+      text-align: center;
+    }
+    th { background: #eee; }
+    .gain { color: green; }
+    .perte { color: red; }
+    #globalPerf { font-weight: bold; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+  <h1>Dashboard Portefeuille</h1>
+  <div class="controls">
+    <select id="type">
+      <option value="crypto">Crypto</option>
+      <option value="action">Action</option>
+    </select>
+    <input id="symbol" placeholder="Symbole (ex: BTC, AAPL)" />
+    <input id="quantity" type="number" placeholder="Quantité" />
+    <input id="invested" type="number" placeholder="Investi" />
+    <select id="devise">
+      <option value="cad">CAD</option>
+      <option value="usd">USD</option>
+    </select>
+    <button onclick="addAsset()">Ajouter</button>
+    <input id="removeSymbol" placeholder="Symbole à supprimer" />
+    <button onclick="removeAsset()">Supprimer</button>
+    <button onclick="refreshAll()">Actualiser maintenant</button>
+  </div>
+  <div id="globalPerf"></div>
+  <h2>Actions</h2>
+  <table>
+    <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
+    <tbody id="tableAction"></tbody>
+  </table>
+  <h2>Cryptos</h2>
+  <table>
+    <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
+    <tbody id="tableCrypto"></tbody>
+  </table>
+  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>
+  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul>
+  <script src="script.js"></script>
+</body>
+</html>
