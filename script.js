@@ -1,4 +1,4 @@
-// script.js (modifié avec meilleure tolérance pour actions sans pc - previousClose)
+// script.js (intégration proxy CoinGecko + prévision enrichie)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
@@ -67,27 +67,20 @@ async function fetchOpportunities() {
   ul.innerHTML = '';
 
   try {
-    const res = await fetch("https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=percent_change_24h_desc&per_page=3&page=1");
-    const tickers = await res.json();
+    const pages = await Promise.all([
+      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=percent_change_24h_desc&per_page=5&page=1`)
+    ]);
+    const tickers = await pages[0].json();
 
     const enriched = await Promise.all(tickers.map(async t => {
       const id = t.id;
       const sym = t.symbol.toUpperCase();
-      let errorMsg = '';
-
       try {
-        const [
-          newsRes,
-          rsiRes,
-          macdRes,
-          communityRes,
-          eventRes,
-          onchainRes
-        ] = await Promise.all([
+        const [newsRes, rsiRes, macdRes, communityRes, eventRes, onchainRes] = await Promise.all([
           fetch(`${PROXY}news?q=${id}`),
           fetch(`${PROXY}rsi?symbol=${sym}`),
           fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
+          fetch(`${PROXY}coingecko?endpoint=coins/${id}`),
           fetch(`${PROXY}events?coins=${sym}`),
           fetch(`${PROXY}onchain?symbol=${t.symbol}`)
         ]);
@@ -113,7 +106,7 @@ async function fetchOpportunities() {
 
         const forecast = t.price_change_percentage_24h * sentimentBoost * indicatorBoost * socialBoost * eventBoost * onchainBoost;
         const article = news.articles[0]?.title || "Aucune info récente.";
-        const eventNote = hasEvent ? `Événement à venir: ${events.body[0].title}` : "";
+        const eventNote = hasEvent ? `Événement: ${events.body[0].title}` : "";
 
         return {
           name: sym,
@@ -123,14 +116,13 @@ async function fetchOpportunities() {
           reason: article,
           extra: eventNote
         };
-      } catch (e) {
-        errorMsg = e.message || "Erreur inconnue";
-        return { name: sym, forecast: "+0.0%", confidence: "0.0", reason: `Erreur: ${errorMsg}`, extra: "Debug info visible" };
+      } catch {
+        return null;
       }
     }));
 
-    enriched.forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon || "?"}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+    enriched.filter(Boolean).forEach(e => {
+      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
   } catch {
     ul.innerHTML = '<li>Erreur globale lors de la récupération des opportunités</li>';
