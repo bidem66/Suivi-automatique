@@ -1,4 +1,4 @@
-// script.js (modifié avec proxy CoinGecko corrigé)
+// script.js (corrigé avec proxy CoinGecko 100% fonctionnel)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 
@@ -70,9 +70,7 @@ async function fetchOpportunities() {
   try {
     const pages = await Promise.all([
       fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=1`),
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=2`),
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=3`),
-      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=4`)
+      fetch(`${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=250&page=2`)
     ]);
     for (const p of pages) allTickers.push(...await p.json());
   } catch {
@@ -90,7 +88,7 @@ async function fetchOpportunities() {
         fetch(`${PROXY}news?q=${id}`),
         fetch(`${PROXY}rsi?symbol=${sym}`),
         fetch(`${PROXY}macd?symbol=${sym}`),
-        fetch(`https://api.coingecko.com/api/v3/coins/${id}`),
+        fetch(`${PROXY}coingecko?endpoint=coins/${id}`),
         fetch(`${PROXY}events?coins=${sym}`),
         fetch(`${PROXY}onchain?symbol=${t.symbol}`)
       ]);
