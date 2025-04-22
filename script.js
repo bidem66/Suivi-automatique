@@ -109,6 +109,10 @@ async function fetchOpportunities() {
   ul.appendChild(listContainer);
   const debugList = document.getElementById("analyzedList");
 
+  let filteredCount = 0;
+  let enrichedCount = 0;
+  let rejectedByIndicators = 0;
+
   let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
   const all = (await response.json()).slice(0, 2000);
   const candidates = [];
@@ -133,6 +137,7 @@ async function fetchOpportunities() {
       const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
       if (found || isOnWealthsimple) {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
+        filteredCount++;
       }
     } catch {}
     if (candidates.length >= 100) break;
@@ -146,7 +151,7 @@ async function fetchOpportunities() {
 
     progress.value = i + 1;
     const item = document.createElement("li");
-    item.textContent = sym;
+    item.textContent = sym + " (filtré)";
     debugList.appendChild(item);
 
     try {
@@ -165,7 +170,10 @@ async function fetchOpportunities() {
       const hasEvent = events?.body?.length > 0;
       const activeAddresses = onchain?.data?.value || 0;
 
-      if (rsi > 70 || macdSignal < 0) continue;
+      if (rsi > 70 || macdSignal < 0) {
+        rejectedByIndicators++;
+        continue;
+      }
 
       const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
       const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
@@ -187,15 +195,17 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
+      enrichedCount++;
       await sleep(1440);
     } catch (e) {
       console.warn(`Erreur enrichissement pour ${sym}`);
     }
   }
 
-  ul.innerHTML = '';
+  ul.innerHTML = `<li><strong>${enrichedCount}</strong> crypto(s) enrichie(s), <strong>${rejectedByIndicators}</strong> rejetée(s) par les indicateurs sur <strong>${filteredCount}</strong> candidates filtrées initialement.</li>`;
+
   if (enriched.length === 0) {
-    ul.innerHTML = '<li>Aucune crypto explosive détectée pour le moment.</li>';
+    ul.innerHTML += '<li>Aucune crypto explosive détectée pour le moment.</li>';
     return;
   }
 
