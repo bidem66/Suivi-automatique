@@ -1,4 +1,4 @@
-// script.js complet avec enrichissement IA complet, traitement séquentiel et temporisation
+// script.js complet avec enrichissement IA, barre de progression et compteur
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -90,6 +90,16 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours sur 500 cryptos...</li>';
 
+  const progressBar = document.createElement('progress');
+  progressBar.max = 20;
+  progressBar.value = 0;
+  ul.appendChild(progressBar);
+
+  const progressText = document.createElement('div');
+  progressText.style.marginTop = '10px';
+  progressText.textContent = '0 / 20 analysées';
+  ul.appendChild(progressText);
+
   try {
     const all = (await getCachedPaprikaData()).slice(0, 500);
     const filtered = all
@@ -99,7 +109,8 @@ async function fetchOpportunities() {
 
     const enriched = [];
 
-    for (const t of filtered) {
+    for (let i = 0; i < filtered.length; i++) {
+      const t = filtered[i];
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
 
@@ -143,7 +154,9 @@ async function fetchOpportunities() {
         console.warn(`Erreur enrichissement pour ${sym}:`, e);
       }
 
-      await sleep(1000); // pause entre chaque crypto
+      progressBar.value = i + 1;
+      progressText.textContent = `${i + 1} / 20 analysées`;
+      await sleep(1500);
     }
 
     ul.innerHTML = '';
