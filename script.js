@@ -1,5 +1,3 @@
-// script.js – IA corrigée : score dynamique + actualités fiables
-
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
@@ -121,15 +119,23 @@ async function fetchOpportunities() {
       debugDiv.innerHTML += `<div>→ Analyse ${sym} (${t.exchange})</div>`;
 
       try {
-        let news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
-        if (!news.articles?.length) news = await (await fetch(`${PROXY}news?q=${name}`)).json();
+        let news = {};
+        try {
+          news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
+          if (!news.articles?.length) {
+            news = await (await fetch(`${PROXY}news?q=${name}`)).json();
+          }
+        } catch {
+          news = { articles: [] };
+        }
 
-        const rsi = (await (await fetch(`${PROXY}rsi?symbol=${sym}`)).json()).value;
+        const rsiData = await (await fetch(`${PROXY}rsi?symbol=${sym}`)).json();
         const macdData = await (await fetch(`${PROXY}macd?symbol=${sym}`)).json();
-        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
         const events = await (await fetch(`${PROXY}events?coins=${sym}`)).json();
         const onchain = await (await fetch(`${PROXY}onchain?symbol=${t.symbol}`)).json();
 
+        const rsi = rsiData.value;
+        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
         const hasEvent = events?.body?.length > 0;
         const activeAddresses = onchain?.data?.value || 0;
 
@@ -212,6 +218,7 @@ async function refreshAll() {
   const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
+
   await fetchOpportunities();
 }
 
