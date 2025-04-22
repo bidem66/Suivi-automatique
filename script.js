@@ -6,12 +6,7 @@ const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
 const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon", "doge"];
 
 let paprikaCallTimestamps = [];
-let apiTimers = {
-  taapi: [],
-  news: [],
-  events: [],
-  onchain: []
-};
+let apiTimers = { taapi: [], news: [], events: [], onchain: [] };
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -62,6 +57,7 @@ async function safePaprikaFetch(url) {
     return { json: async () => [] };
   }
 }
+
 async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
@@ -74,16 +70,16 @@ async function fetchExchangeRate() {
 
 async function fetchCrypto(sym, curr) {
   try {
-    const symbolPair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
+    const pair = sym.toUpperCase() + 'USDT';
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
     const data = await res.json();
-    const usdPrice = parseFloat(data.lastPrice);
-    const usdChange = parseFloat(data.priceChangePercent);
+    const usd = parseFloat(data.lastPrice);
+    const change = parseFloat(data.priceChangePercent);
     if (curr.toUpperCase() === 'CAD') {
       const rate = await fetchExchangeRate();
-      return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
+      return { price: usd * rate, change, currency: 'CAD' };
     }
-    return { price: usdPrice, change: usdChange, currency: 'USD' };
+    return { price: usd, change, currency: 'USD' };
   } catch {
     return null;
   }
@@ -119,6 +115,7 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
+
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
@@ -213,7 +210,7 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
-      await sleep(500);
+      await sleep(800); // protège les API de surcharge
     } catch (e) {
       console.warn(`Erreur enrichissement pour ${sym}`);
     }
@@ -225,10 +222,14 @@ async function fetchOpportunities() {
     return;
   }
 
-  enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
-    ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
-  });
+  enriched
+    .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+    .slice(0, 5)
+    .forEach(e => {
+      ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+    });
 }
+
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
