@@ -45,10 +45,15 @@
     .gain { color: green; }
     .perte { color: red; }
     #globalPerf { font-weight: bold; margin-bottom: 10px; }
+    #opportunityControls {
+      margin: 10px 0 20px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
   <h1>Dashboard Portefeuille</h1>
+
   <div class="controls">
     <select id="type">
       <option value="crypto">Crypto</option>
@@ -66,21 +71,30 @@
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
   </div>
+
   <div id="globalPerf"></div>
+
   <h2>Actions</h2>
   <table>
     <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
     <tbody id="tableAction"></tbody>
   </table>
+
   <h2>Cryptos</h2>
   <table>
     <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
     <tbody id="tableCrypto"></tbody>
   </table>
+
   <h2>Opportunités du moment</h2>
+  <div id="opportunityControls">
+    <button onclick="fetchOpportunities()">Analyser les opportunités IA</button>
+  </div>
   <ul id="opportunities"></ul>
+
   <h2>Conseils personnalisés</h2>
   <ul id="adviceList"></ul>
+
   <script src="script.js"></script>
 </body>
 </html>
