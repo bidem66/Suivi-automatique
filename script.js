@@ -1,4 +1,5 @@
 // script.js
+
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 const STABLES = ["BTC","ETH","USDT","USDC","DAI","TUSD","BNB","XRP","BCH","LTC"];
@@ -132,7 +133,10 @@ async function fetchOpportunities() {
           activeAddr > 1000 ? 1.2 : 1
         ];
         const forecast = t.quotes.USD.percent_change_24h * boosts.reduce((a,b)=>a*b,1);
-        if (forecast < 15) { debug(`IA skip ${sym} forecast ${forecast.toFixed(1)}`); continue; }
+        if (forecast < 15) { 
+          debug(`IA skip ${sym} forecast ${forecast.toFixed(1)}`); 
+          continue; 
+        }
         enriched.push({ name: sym, forecast: `+${forecast.toFixed(1)}%`, horizon: '30j', reason: news.articles?.[0]?.title || '' });
         debug(`IA keep ${sym} forecast ${forecast.toFixed(1)}`);
       } catch (e) {
@@ -141,8 +145,12 @@ async function fetchOpportunities() {
     }
     ul.innerHTML = '';
     if (!enriched.length) ul.innerHTML = '<li>Aucune crypto explosive détectée.</li>';
-    enriched.sort((a,b)=>parseFloat(b.forecast)-parseFloat(a.forecast)).slice(0,5)
-      .forEach(e=> ul.innerHTML += `<li><strong>${e.name}</strong> ${e.forecast} (${e.horizon})<br/><em>${e.reason}</em></li>`);
+    enriched
+      .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+      .slice(0,5)
+      .forEach(e => {
+        ul.innerHTML += `<li><strong>${e.name}</strong> ${e.forecast} (${e.horizon})<br/><em>${e.reason}</em></li>`;
+      });
   } catch (e) {
     debug('fetchOpportunities error: ' + e.message);
     document.getElementById('opportunities').innerHTML = '<li>Erreur IA globale</li>';
@@ -157,21 +165,35 @@ async function refreshAll() {
   tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = '';
   let inv = 0, val = 0;
   for (let a of portfolio) {
-    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
-    if (!info) { debug(`No info for ${a.sym}`); continue; }
+    const info = a.type === 'crypto'
+      ? await fetchCrypto(a.sym, a.curr)
+      : await fetchAction(a.sym);
+    if (!info) {
+      debug(`No info for ${a.sym}`);
+      continue;
+    }
     const value = info.price * a.qty;
     const gain = value - a.inv;
     const change = info.change?.toFixed(2) || '0.00';
-    const cls = gain>=0?'gain':'perte';
-    const sign = gain>=0?'+':'';
+    const cls = gain >= 0 ? 'gain' : 'perte';
+    const sign = gain >= 0 ? '+' : '';
     inv += a.inv; val += value;
-    tbodyA.innerHTML += `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${cls}">${sign}${change}%</td><td>${info.currency}</td></tr>`;
-    advice.innerHTML += `<li><strong>${a.sym}</strong> : ${gain>=20?'Vendre':gain<=-15?'À risque':'Garder'}</li>`;
+    tbodyA.innerHTML += `
+      <tr>
+        <td>${a.sym}</td>
+        <td>${a.qty}</td>
+        <td>${a.inv.toFixed(2)}</td>
+        <td>${info.price.toFixed(2)}</td>
+        <td>${value.toFixed(2)}</td>
+        <td class="${cls}">${sign}${change}%</td>
+        <td>${info.currency}</td>
+      </tr>`;
+    advice.innerHTML += `<li><strong>${a.sym}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
   }
   const totalGain = val - inv;
-  const totalPct = inv?((totalGain/inv*100).toFixed(2)):0;
+  const totalPct = inv ? ((totalGain / inv * 100).toFixed(2)) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color = totalGain>=0?'green':'red';
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
   await fetchOpportunities();
 }
 
