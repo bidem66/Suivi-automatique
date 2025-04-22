@@ -59,17 +59,37 @@ async function addAsset() {
   await refreshAll();
 }
 
-async function fetchOpportunities() {
-  const ul = document.getElementById("opportunities");
-  ul.innerHTML = '<li>Analyse IA en cours sur 250+ cryptos...</li>';
+async function getCachedPaprikaData() {
+  const cacheKey = 'coinpaprika_cache';
+  const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+  const now = Date.now();
+  const maxAge = 6 * 60 * 60 * 1000; // 6 heures en ms
+
+  if (cache.timestamp && now - cache.timestamp < maxAge && cache.data) {
+    return cache.data;
+  }
 
   try {
     const res = await fetch(`${PROXY}coinpaprika`);
-    const all = await res.json();
+    const data = await res.json();
+    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data }));
+    return data;
+  } catch (e) {
+    console.warn("Erreur CoinPaprika. Utilisation du cache si dispo.");
+    return cache.data || [];
+  }
+}
+
+async function fetchOpportunities() {
+  const ul = document.getElementById("opportunities");
+  ul.innerHTML = '<li>Analyse IA en cours sur 500 cryptos...</li>';
+
+  try {
+    const all = (await getCachedPaprikaData()).slice(0, 500); // max 500 cryptos
     const filtered = all
       .filter(c => c.quotes?.USD?.percent_change_24h)
       .sort((a, b) => b.quotes.USD.percent_change_24h - a.quotes.USD.percent_change_24h)
-      .slice(0, 20);
+      .slice(0, 20); // top 20 pour enrichissement
 
     const enriched = [];
 
@@ -170,8 +190,6 @@ async function refreshAll() {
   const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
-
-  await fetchOpportunities();
 }
 
 window.onload = () => {
