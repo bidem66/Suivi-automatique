@@ -1,3 +1,4 @@
+// script.js complet avec debug intégré et enrichissement IA + protection API
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
@@ -7,10 +8,7 @@ const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon"
 
 let paprikaCallTimestamps = [];
 let apiTimers = {
-  taapi: [],
-  news: [],
-  events: [],
-  onchain: []
+  taapi: [], news: [], events: [], onchain: []
 };
 
 function sleep(ms) {
@@ -21,6 +19,15 @@ function trackCall(list) {
   const now = Date.now();
   list.push(now);
   return list.filter(t => now - t < 1000);
+}
+
+function logDebug(msg) {
+  const log = document.getElementById("debugLogs");
+  if (log) {
+    const li = document.createElement("li");
+    li.textContent = msg;
+    log.appendChild(li);
+  }
 }
 
 async function safeFetch(api, url) {
@@ -112,33 +119,28 @@ async function addAsset() {
 }
 
 async function fetchOpportunities() {
+  localStorage.removeItem('coinpaprika_cache');
+
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
-
   const progress = document.createElement("progress");
   progress.max = 100;
   progress.value = 0;
   progress.style.width = "100%";
   ul.appendChild(progress);
 
-  const debugList = document.createElement("ul");
-  ul.appendChild(debugList);
+  const debugList = document.getElementById("debugLogs");
+  if (debugList) debugList.innerHTML = '';
 
-  let cachedList = JSON.parse(localStorage.getItem("coinpaprika_cache") || "null");
-  if (!cachedList || Date.now() - cachedList.ts > 120000) {
-    const res = await safePaprikaFetch(`${PROXY}coinpaprika`);
-    const data = await res.json();
-    cachedList = { ts: Date.now(), data };
-    localStorage.setItem("coinpaprika_cache", JSON.stringify(cachedList));
-  }
-  const all = cachedList.data.slice(0, 2000);
-
+  const raw = await safePaprikaFetch(`${PROXY}coinpaprika`);
+  const all = (await raw.json()).slice(0, 2000);
   const candidates = [];
+
   for (const t of all) {
     const sym = t.symbol.toUpperCase();
     const name = t.name?.toLowerCase() || "";
     if (STABLES.includes(sym)) continue;
-    if (sym.length < 3 || SUSPECT_WORDS.some(word => name.includes(word))) continue;
+    if (sym.length < 3 || SUSPECT_WORDS.some(w => name.includes(w))) continue;
     const vol = t.quotes?.USD?.volume_24h || 0;
     const change = t.quotes?.USD?.percent_change_24h || 0;
     const ratio = (vol / t.quotes?.USD?.market_cap) || 0;
@@ -147,10 +149,7 @@ async function fetchOpportunities() {
     try {
       const mres = await safePaprikaFetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
       const markets = await mres.json();
-      const found = markets.find(m =>
-        m.exchange_name?.toLowerCase().includes('binance') ||
-        m.exchange_name?.toLowerCase().includes('ndax')
-      );
+      const found = markets.find(m => m.exchange_name?.toLowerCase().includes('binance') || m.exchange_name?.toLowerCase().includes('ndax'));
       const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
       if (found || isOnWealthsimple) {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
@@ -159,16 +158,15 @@ async function fetchOpportunities() {
     if (candidates.length >= 100) break;
   }
 
+  logDebug(`Candidats filtrés : ${candidates.length}`);
+
   const enriched = [];
   for (let i = 0; i < candidates.length; i++) {
     const t = candidates[i];
     const sym = t.symbol.toUpperCase();
     const name = t.name.toLowerCase().replace(/\s+/g, '-');
-
     progress.value = i + 1;
-    const item = document.createElement("li");
-    item.textContent = sym;
-    debugList.appendChild(item);
+    logDebug(`Analyse de ${sym} (${i + 1}/${candidates.length})`);
 
     try {
       const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
@@ -186,17 +184,22 @@ async function fetchOpportunities() {
       const hasEvent = events?.body?.length > 0;
       const activeAddresses = onchain?.data?.value || 0;
 
-      if (rsi > 70 || macdSignal < 0) continue;
+      if (rsi > 70 || macdSignal < 0) {
+        logDebug(`REJETÉE (indicateurs) : ${sym} - RSI: ${rsi}, MACD: ${macdSignal}`);
+        continue;
+      }
 
       const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
       const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
       const eventBoost = hasEvent ? 1.2 : 1;
       const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
-
       const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
       const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
 
-      if (forecast < 15) continue;
+      if (forecast < 15) {
+        logDebug(`REJETÉE (forecast bas): ${sym} - Forecast: ${forecast.toFixed(1)}%`);
+        continue;
+      }
 
       enriched.push({
         name: sym,
@@ -208,9 +211,10 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
+      logDebug(`ENRICHIE : ${sym} - Forecast ${forecast.toFixed(1)}% - RSI: ${rsi} - MACD: ${macdSignal.toFixed(2)}`);
       await sleep(1200);
     } catch (e) {
-      console.warn(`Erreur enrichissement pour ${sym}`, e);
+      logDebug(`ERREUR enrichissement pour ${sym}`);
     }
   }
 
