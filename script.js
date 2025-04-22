@@ -94,6 +94,8 @@ async function addAsset() {
 }
 
 async function fetchOpportunities() {
+  localStorage.removeItem('coinpaprika_cache');
+
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
@@ -109,10 +111,6 @@ async function fetchOpportunities() {
   ul.appendChild(listContainer);
   const debugList = document.getElementById("analyzedList");
 
-  let filteredCount = 0;
-  let enrichedCount = 0;
-  let rejectedByIndicators = 0;
-
   let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
   const all = (await response.json()).slice(0, 2000);
   const candidates = [];
@@ -125,7 +123,7 @@ async function fetchOpportunities() {
     const vol = t.quotes?.USD?.volume_24h || 0;
     const change = t.quotes?.USD?.percent_change_24h || 0;
     const ratio = (vol / t.quotes?.USD?.market_cap) || 0;
-    if (change < 2 || vol < 500000 || t.rank > 300 || ratio < 0.01) continue;
+    if (change < 1 || vol < 200000 || t.rank > 600 || ratio < 0.005) continue;
 
     try {
       const mres = await safePaprikaFetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
@@ -137,7 +135,6 @@ async function fetchOpportunities() {
       const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
       if (found || isOnWealthsimple) {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
-        filteredCount++;
       }
     } catch {}
     if (candidates.length >= 100) break;
@@ -151,7 +148,7 @@ async function fetchOpportunities() {
 
     progress.value = i + 1;
     const item = document.createElement("li");
-    item.textContent = sym + " (filtré)";
+    item.textContent = sym;
     debugList.appendChild(item);
 
     try {
@@ -170,10 +167,7 @@ async function fetchOpportunities() {
       const hasEvent = events?.body?.length > 0;
       const activeAddresses = onchain?.data?.value || 0;
 
-      if (rsi > 70 || macdSignal < 0) {
-        rejectedByIndicators++;
-        continue;
-      }
+      if (rsi > 70 || macdSignal < 0) continue;
 
       const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
       const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
@@ -195,17 +189,15 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
-      enrichedCount++;
       await sleep(1440);
     } catch (e) {
       console.warn(`Erreur enrichissement pour ${sym}`);
     }
   }
 
-  ul.innerHTML = `<li><strong>${enrichedCount}</strong> crypto(s) enrichie(s), <strong>${rejectedByIndicators}</strong> rejetée(s) par les indicateurs sur <strong>${filteredCount}</strong> candidates filtrées initialement.</li>`;
-
+  ul.innerHTML = '';
   if (enriched.length === 0) {
-    ul.innerHTML += '<li>Aucune crypto explosive détectée pour le moment.</li>';
+    ul.innerHTML = '<li>Aucune crypto explosive détectée pour le moment.</li>';
     return;
   }
 
