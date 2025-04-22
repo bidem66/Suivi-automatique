@@ -1,27 +1,27 @@
-name: Auto Deploy with Cache Buster
+name: Déploiement manuel vers GitHub Pages
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # Déclencheur manuel uniquement
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@v3
+      - name: Récupération du dépôt
+        uses: actions/checkout@v4
+
+      - name: Configuration de GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Téléverser le contenu vers GitHub Pages
+        uses: actions/upload-pages-artifact@v3
         with:
-          token: ${{ secrets.GH_PAT }}
+          path: '.'
 
-      - name: Générer un cache buster (timestamp)
-        run: |
-          echo "<!-- cache-buster: $(date +%s) -->" >> index.html
-
-      - name: Commit auto avec cache buster
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add index.html
-          git commit -m "Auto: cache buster"
-          git push origin main
+      - name: Déployer vers GitHub Pages
+        uses: actions/deploy-pages@v4
