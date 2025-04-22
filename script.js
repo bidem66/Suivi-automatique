@@ -1,4 +1,3 @@
-// script.js complet avec enrichissement étendu, protection API et cache vidé à chaque appel
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
@@ -7,7 +6,9 @@ const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
 const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon", "doge"];
 
 let paprikaCallTimestamps = [];
-let apiTimers = { taapi: [], news: [], events: [], onchain: [] };
+let apiTimers = {
+  taapi: [], news: [], events: [], onchain: []
+};
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -49,17 +50,6 @@ async function safePaprikaFetch(url) {
     return { json: async () => [] };
   }
 }
-
-async function getPaprikaData() {
-  localStorage.removeItem('coinpaprika_cache');
-  try {
-    const response = await safePaprikaFetch(`${PROXY}coinpaprika`);
-    return await response.json();
-  } catch {
-    return [];
-  }
-}
-
 async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
@@ -116,8 +106,9 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
-
 async function fetchOpportunities() {
+  localStorage.removeItem('coinpaprika_cache');
+
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
@@ -130,7 +121,8 @@ async function fetchOpportunities() {
   const debugList = document.createElement("ul");
   ul.appendChild(debugList);
 
-  const all = (await getPaprikaData()).slice(0, 2000);
+  let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
+  const all = (await response.json()).slice(0, 2000);
   const candidates = [];
 
   for (const t of all) {
@@ -146,7 +138,10 @@ async function fetchOpportunities() {
     try {
       const mres = await safePaprikaFetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
       const markets = await mres.json();
-      const found = markets.find(m => m.exchange_name?.toLowerCase().includes('binance') || m.exchange_name?.toLowerCase().includes('ndax'));
+      const found = markets.find(m =>
+        m.exchange_name?.toLowerCase().includes('binance') ||
+        m.exchange_name?.toLowerCase().includes('ndax')
+      );
       const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
       if (found || isOnWealthsimple) {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
