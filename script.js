@@ -2,15 +2,8 @@ const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
-const WEALTHSIMPLE = [
-  "BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
-  "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"
-];
+const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE", "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"];
 const FORCED_TOKENS = ["SOL", "BONK", "WIF", "ADA", "LINK"];
-
-function sleep(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
 
 async function fetchAction(sym) {
   try {
@@ -70,22 +63,6 @@ async function addAsset() {
   await refreshAll();
 }
 
-async function getCachedPaprikaData() {
-  const cacheKey = 'coinpaprika_cache';
-  const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-  const now = Date.now();
-  const maxAge = 6 * 60 * 60 * 1000;
-  if (cache.timestamp && now - cache.timestamp < maxAge && cache.data) return cache.data;
-  try {
-    const res = await fetch(`${PROXY}coinpaprika`);
-    const data = await res.json();
-    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data }));
-    return data;
-  } catch (e) {
-    return cache.data || [];
-  }
-}
-
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel sur 30 jours...</li>';
@@ -98,10 +75,12 @@ async function fetchOpportunities() {
   ul.appendChild(progress);
 
   try {
-    const all = (await getCachedPaprikaData()).slice(0, 1000);
+    const all = await (await fetch(`${PROXY}coinpaprika`)).json();
+    ul.innerHTML += `<li>${all.length} cryptos téléchargées depuis CoinPaprika</li>`;
+    const limited = all.slice(0, 1000);
     const candidates = [];
 
-    for (const t of all) {
+    for (const t of limited) {
       const sym = t.symbol.toUpperCase();
       if (STABLES.includes(sym)) continue;
       const change = t.quotes?.USD?.percent_change_24h || 0;
@@ -120,13 +99,15 @@ async function fetchOpportunities() {
           if (found || isOnWealthsimple) {
             candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
           }
-        } catch {}
+        } catch (e) {
+          ul.innerHTML += `<li>${sym} : ❌ erreur fetch marchés (${e.message})</li>`;
+        }
       }
       if (candidates.length >= 30) break;
     }
 
     if (candidates.length === 0) {
-      ul.innerHTML = '<li>Aucune crypto intéressante trouvée pour l’analyse IA.</li>';
+      ul.innerHTML += '<li>Aucune crypto intéressante trouvée pour l’analyse IA.</li>';
       return;
     }
 
@@ -136,18 +117,10 @@ async function fetchOpportunities() {
       const t = candidates[i];
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
+      ul.innerHTML += `<li>Analyse de ${sym}...</li>`;
 
       try {
-        let news = {};
-        try {
-          news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
-          if (!news.articles?.length) {
-            news = await (await fetch(`${PROXY}news?q=${name}`)).json();
-          }
-        } catch {
-          news = { articles: [] };
-        }
-
+        const news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
         const rsiData = await (await fetch(`${PROXY}rsi?symbol=${sym}`)).json();
         const macdData = await (await fetch(`${PROXY}macd?symbol=${sym}`)).json();
         const events = await (await fetch(`${PROXY}events?coins=${sym}`)).json();
@@ -175,22 +148,27 @@ async function fetchOpportunities() {
           reason: news.articles?.[0]?.title || "Aucune info récente.",
           extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
         });
+
+        ul.innerHTML += `<li>Analyse de ${sym} : ✅ enrichissement OK</li>`;
       } catch (e) {
-        console.warn(`Erreur enrichissement pour ${sym}`);
+        ul.innerHTML += `<li>${sym} : ❌ erreur enrichissement (${e.message})</li>`;
       }
     }
 
-    ul.innerHTML = '';
     if (enriched.length === 0) {
-      ul.innerHTML = '<li>Aucune crypto explosive détectée pour le moment.</li>';
+      ul.innerHTML += '<li>Aucune crypto explosive détectée pour le moment.</li>';
       return;
     }
 
-    enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
-    });
+    ul.innerHTML += '<hr><strong>TOP 5 opportunités :</strong>';
+    enriched
+      .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+      .slice(0, 5)
+      .forEach(e => {
+        ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+      });
   } catch (err) {
-    ul.innerHTML = '<li>Erreur globale lors de l’analyse IA.</li>';
+    ul.innerHTML += '<li>Erreur globale lors de l’analyse IA.</li>';
   }
 }
 
