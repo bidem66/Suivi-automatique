@@ -1,6 +1,11 @@
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
+
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
+const WEALTHSIMPLE = [
+  "BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
+  "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"
+];
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -104,8 +109,14 @@ async function fetchOpportunities() {
         try {
           const mres = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
           const markets = await mres.json();
-          const found = markets.find(m => m.exchange_name?.toLowerCase().includes('binance') || m.exchange_name?.toLowerCase().includes('ndax'));
-          if (found) candidates.push({ ...t, exchange: found.exchange_name });
+          const found = markets.find(m =>
+            m.exchange_name?.toLowerCase().includes('binance') ||
+            m.exchange_name?.toLowerCase().includes('ndax')
+          );
+          const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
+          if (found || isOnWealthsimple) {
+            candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
+          }
         } catch {}
       }
       if (candidates.length >= 30) break;
@@ -159,6 +170,7 @@ async function fetchOpportunities() {
           forecast: `+${forecast.toFixed(1)}%`,
           horizon: "dans les 30 jours",
           confidence,
+          platform: t.exchange,
           reason: news.articles?.[0]?.title || "Aucune info récente.",
           extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
         });
@@ -174,7 +186,7 @@ async function fetchOpportunities() {
     }
 
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+      ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
   } catch (err) {
     ul.innerHTML = '<li>Erreur globale lors de l’analyse IA.</li>';
