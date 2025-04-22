@@ -2,27 +2,26 @@ name: Auto Deploy with Cache Buster
 
 on:
   push:
-    branches:
-      - main
-    paths-ignore:
-      - 'index.html'
+    branches: [main]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout du code
         uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}
 
       - name: Générer un cache buster (timestamp)
         run: |
-          TIMESTAMP=$(date +%s)
-          sed -i "s|script.js.*|script.js?v=$TIMESTAMP\"|g" index.html
+          echo "<!-- cache-buster: $(date +%s) -->" >> index.html
 
       - name: Commit auto avec cache buster
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git add index.html
-          git commit -m "Auto: cache buster $TIMESTAMP"
-          git push
+          git commit -m "Auto: cache buster"
+          git push origin main
