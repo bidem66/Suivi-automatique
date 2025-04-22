@@ -61,9 +61,7 @@ async function safePaprikaFetch(url) {
   } catch {
     return { json: async () => [] };
   }
-}
-
-async function fetchExchangeRate() {
+  async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
     const data = await res.json();
@@ -120,13 +118,12 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
-
-async function fetchOpportunities() {
+  async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
   const progress = document.createElement("progress");
-  progress.max = 30;
+  progress.max = 100;
   progress.value = 0;
   progress.style.width = "100%";
   progress.style.height = "10px";
@@ -163,7 +160,7 @@ async function fetchOpportunities() {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
       }
     } catch {}
-    if (candidates.length >= 30) break;
+    if (candidates.length >= 100) break;
   }
 
   const enriched = [];
@@ -230,8 +227,7 @@ async function fetchOpportunities() {
   enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
     ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
   });
-}
-
+  }
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
