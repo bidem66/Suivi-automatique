@@ -1,5 +1,11 @@
+// script.js complet avec enrichissement IA complet, traitement séquentiel et temporisation
+
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 async function fetchAction(sym) {
   try {
@@ -63,7 +69,7 @@ async function getCachedPaprikaData() {
   const cacheKey = 'coinpaprika_cache';
   const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
   const now = Date.now();
-  const maxAge = 6 * 60 * 60 * 1000; // 6 heures en ms
+  const maxAge = 6 * 60 * 60 * 1000;
 
   if (cache.timestamp && now - cache.timestamp < maxAge && cache.data) {
     return cache.data;
@@ -85,11 +91,11 @@ async function fetchOpportunities() {
   ul.innerHTML = '<li>Analyse IA en cours sur 500 cryptos...</li>';
 
   try {
-    const all = (await getCachedPaprikaData()).slice(0, 500); // max 500 cryptos
+    const all = (await getCachedPaprikaData()).slice(0, 500);
     const filtered = all
       .filter(c => c.quotes?.USD?.percent_change_24h)
       .sort((a, b) => b.quotes.USD.percent_change_24h - a.quotes.USD.percent_change_24h)
-      .slice(0, 20); // top 20 pour enrichissement
+      .slice(0, 20);
 
     const enriched = [];
 
@@ -134,11 +140,18 @@ async function fetchOpportunities() {
           extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
         });
       } catch (e) {
-        console.warn(`Échec enrichissement pour ${sym}`);
+        console.warn(`Erreur enrichissement pour ${sym}:`, e);
       }
+
+      await sleep(1000); // pause entre chaque crypto
     }
 
     ul.innerHTML = '';
+    if (enriched.length === 0) {
+      ul.innerHTML = '<li>Aucune opportunité IA détectée pour le moment.</li>';
+      return;
+    }
+
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
