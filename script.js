@@ -1,5 +1,3 @@
-// script.js avec barre de chargement fonctionnelle et filtre corrigé (change > 5%)
-
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
@@ -114,7 +112,7 @@ async function fetchOpportunities() {
     }
 
     if (candidates.length === 0) {
-      ul.innerHTML = '<li>Aucune crypto intéressante trouvée pour l'analyse IA.</li>';
+      ul.innerHTML = '<li>Aucune crypto intéressante trouvée pour l’analyse IA.</li>';
       return;
     }
 
@@ -179,7 +177,7 @@ async function fetchOpportunities() {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
   } catch (err) {
-    ul.innerHTML = '<li>Erreur globale lors de l\'analyse IA.</li>';
+    ul.innerHTML = '<li>Erreur globale lors de l’analyse IA.</li>';
   }
 }
 
@@ -224,6 +222,7 @@ async function refreshAll() {
   const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
+
   await fetchOpportunities();
 }
 
