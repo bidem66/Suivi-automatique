@@ -7,7 +7,10 @@ const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon"
 
 let paprikaCallTimestamps = [];
 let apiTimers = {
-  taapi: [], news: [], events: [], onchain: []
+  taapi: [],
+  news: [],
+  events: [],
+  onchain: []
 };
 
 function sleep(ms) {
@@ -50,6 +53,7 @@ async function safePaprikaFetch(url) {
     return { json: async () => [] };
   }
 }
+
 async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
@@ -59,7 +63,6 @@ async function fetchExchangeRate() {
     return 1.35;
   }
 }
-
 async function fetchCrypto(sym, curr) {
   try {
     const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}USDT`);
