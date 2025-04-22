@@ -1,6 +1,5 @@
 // script.js complet avec cache CoinPaprika, debug visuel mobile, enrichissement IA,
-// protections API, analyse en parallèle (batch de 5), sleep réduit à 500ms,
-// barre de progression fonctionnelle et affichage d'étapes IA (analyse 2000, enrichissement, tri)
+// protections API, analyse par batch de 8 cryptos et délai réduit à 300ms
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -212,17 +211,16 @@ async function fetchOpportunities() {
     } catch (e) {
       debug.innerText += `Erreur marché pour ${sym}\n`;
     }
-    if (candidates.length >= 100) break;
+    if (candidates.length >= 50) break;
   }
 
-  debug.innerText += `Début enrichissement IA (${candidates.length} candidats)\n`;
   const enriched = [];
-  for (let i = 0; i < candidates.length; i += 5) {
-    const batch = candidates.slice(i, i + 5);
+  for (let i = 0; i < candidates.length; i += 8) {
+    const batch = candidates.slice(i, i + 8);
     const results = await Promise.all(batch.map(c => enrichCrypto(c, debug)));
     enriched.push(...results.filter(Boolean));
-    progress.value = ((i + 5) / candidates.length) * 100;
-    await sleep(500);
+    progress.value = ((i + 8) / candidates.length) * 100;
+    await sleep(300);
   }
 
   ul.innerHTML = '';
