@@ -2,8 +2,14 @@ const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
-const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE", "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"];
-const FORCED_TOKENS = ["SOL", "BONK", "WIF", "ADA", "LINK"];
+const WEALTHSIMPLE = [
+  "BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
+  "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"
+];
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 async function fetchAction(sym) {
   try {
@@ -63,6 +69,22 @@ async function addAsset() {
   await refreshAll();
 }
 
+async function getCachedPaprikaData() {
+  const cacheKey = 'coinpaprika_cache';
+  const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+  const now = Date.now();
+  const maxAge = 6 * 60 * 60 * 1000;
+  if (cache.timestamp && now - cache.timestamp < maxAge && cache.data) return cache.data;
+  try {
+    const res = await fetch(`${PROXY}coinpaprika`);
+    const data = await res.json();
+    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data }));
+    return data;
+  } catch (e) {
+    return cache.data || [];
+  }
+}
+
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel sur 30 jours...</li>';
@@ -75,19 +97,20 @@ async function fetchOpportunities() {
   ul.appendChild(progress);
 
   try {
-    const all = await (await fetch(`${PROXY}coinpaprika`)).json();
-    ul.innerHTML += `<li>${all.length} cryptos téléchargées depuis CoinPaprika</li>`;
-    const limited = all.slice(0, 1000);
+    const all = (await getCachedPaprikaData()).slice(0, 1000);
     const candidates = [];
 
-    for (const t of limited) {
+    const listContainer = document.createElement("div");
+    listContainer.innerHTML = "<strong>Cryptos analysées :</strong><ul id='analyzedList'></ul>";
+    ul.appendChild(listContainer);
+    const debugList = document.getElementById("analyzedList");
+
+    for (const t of all) {
       const sym = t.symbol.toUpperCase();
       if (STABLES.includes(sym)) continue;
       const change = t.quotes?.USD?.percent_change_24h || 0;
       const vol = t.quotes?.USD?.volume_24h || 0;
-
-      const forceThis = FORCED_TOKENS.includes(sym);
-      if (forceThis || (change > 2 && vol > 50000 && t.rank <= 1000)) {
+      if (change > 5 && vol > 100000 && t.rank <= 1000) {
         try {
           const mres = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
           const markets = await mres.json();
@@ -98,16 +121,17 @@ async function fetchOpportunities() {
           const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
           if (found || isOnWealthsimple) {
             candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
+            const item = document.createElement("li");
+            item.textContent = sym;
+            debugList.appendChild(item);
           }
-        } catch (e) {
-          ul.innerHTML += `<li>${sym} : ❌ erreur fetch marchés (${e.message})</li>`;
-        }
+        } catch {}
       }
       if (candidates.length >= 30) break;
     }
 
     if (candidates.length === 0) {
-      ul.innerHTML += '<li>Aucune crypto intéressante trouvée pour l’analyse IA.</li>';
+      ul.innerHTML = '<li>Aucune crypto intéressante trouvée pour l’analyse IA.</li>';
       return;
     }
 
@@ -117,10 +141,18 @@ async function fetchOpportunities() {
       const t = candidates[i];
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
-      ul.innerHTML += `<li>Analyse de ${sym}...</li>`;
 
       try {
-        const news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
+        let news = {};
+        try {
+          news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
+          if (!news.articles?.length) {
+            news = await (await fetch(`${PROXY}news?q=${name}`)).json();
+          }
+        } catch {
+          news = { articles: [] };
+        }
+
         const rsiData = await (await fetch(`${PROXY}rsi?symbol=${sym}`)).json();
         const macdData = await (await fetch(`${PROXY}macd?symbol=${sym}`)).json();
         const events = await (await fetch(`${PROXY}events?coins=${sym}`)).json();
@@ -139,6 +171,8 @@ async function fetchOpportunities() {
         const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
         const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
 
+        if (forecast < 15) continue;
+
         enriched.push({
           name: sym,
           forecast: `+${forecast.toFixed(1)}%`,
@@ -148,27 +182,22 @@ async function fetchOpportunities() {
           reason: news.articles?.[0]?.title || "Aucune info récente.",
           extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
         });
-
-        ul.innerHTML += `<li>Analyse de ${sym} : ✅ enrichissement OK</li>`;
       } catch (e) {
-        ul.innerHTML += `<li>${sym} : ❌ erreur enrichissement (${e.message})</li>`;
+        console.warn(`Erreur enrichissement pour ${sym}`);
       }
     }
 
+    ul.innerHTML = '';
     if (enriched.length === 0) {
-      ul.innerHTML += '<li>Aucune crypto explosive détectée pour le moment.</li>';
+      ul.innerHTML = '<li>Aucune crypto explosive détectée pour le moment.</li>';
       return;
     }
 
-    ul.innerHTML += '<hr><strong>TOP 5 opportunités :</strong>';
-    enriched
-      .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
-      .slice(0, 5)
-      .forEach(e => {
-        ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
-      });
+    enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
+      ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+    });
   } catch (err) {
-    ul.innerHTML += '<li>Erreur globale lors de l’analyse IA.</li>';
+    ul.innerHTML = '<li>Erreur globale lors de l’analyse IA.</li>';
   }
 }
 
