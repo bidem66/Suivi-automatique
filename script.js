@@ -1,4 +1,3 @@
-// script.js complet et à jour avec enrichissement étendu et protection API
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
@@ -8,10 +7,7 @@ const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon"
 
 let paprikaCallTimestamps = [];
 let apiTimers = {
-  taapi: [],
-  news: [],
-  events: [],
-  onchain: []
+  taapi: [], news: [], events: [], onchain: []
 };
 
 function sleep(ms) {
@@ -114,6 +110,7 @@ async function addAsset() {
 
 async function fetchOpportunities() {
   localStorage.removeItem('coinpaprika_cache');
+
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
@@ -123,10 +120,8 @@ async function fetchOpportunities() {
   progress.style.width = "100%";
   ul.appendChild(progress);
 
-  const listContainer = document.createElement("div");
-  listContainer.innerHTML = "<strong>Cryptos analysées :</strong><ul id='analyzedList'></ul>";
-  ul.appendChild(listContainer);
-  const debugList = document.getElementById("analyzedList");
+  const debugList = document.createElement("ul");
+  ul.appendChild(debugList);
 
   let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
   const all = (await response.json()).slice(0, 2000);
@@ -208,7 +203,7 @@ async function fetchOpportunities() {
 
       await sleep(1200);
     } catch (e) {
-      console.warn(`Erreur enrichissement pour ${sym}`);
+      console.warn(`Erreur enrichissement pour ${sym}`, e);
     }
   }
 
