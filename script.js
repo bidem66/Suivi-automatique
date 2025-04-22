@@ -1,4 +1,4 @@
-// script.js avec affichage des erreurs IA visibles dans le dashboard (mobile friendly)
+// script.js avec filtre anti-tokens obscurs et nettoyage auto du debug si résultats
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -100,15 +100,21 @@ async function fetchOpportunities() {
   ul.appendChild(progressText);
 
   const debugDiv = document.createElement('div');
+  debugDiv.id = 'debugIA';
   debugDiv.style.marginTop = '15px';
   debugDiv.style.fontSize = '0.8rem';
   debugDiv.style.color = 'darkred';
   ul.appendChild(debugDiv);
 
   try {
-    const all = (await getCachedPaprikaData()).slice(0, 500);
+    const all = (await getCachedPaprikaData()).slice(0, 1000);
     const filtered = all
-      .filter(c => c.quotes?.USD?.percent_change_24h)
+      .filter(c =>
+        c.quotes?.USD?.percent_change_24h &&
+        c.quotes?.USD?.volume_24h > 100000 &&
+        c.rank && c.rank <= 1000 &&
+        c.name && c.symbol
+      )
       .sort((a, b) => b.quotes.USD.percent_change_24h - a.quotes.USD.percent_change_24h)
       .slice(0, 20);
 
@@ -206,11 +212,11 @@ async function fetchOpportunities() {
       return;
     }
 
+    document.getElementById('debugIA')?.remove();
+
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
-
-    ul.appendChild(debugDiv);
   } catch (err) {
     ul.innerHTML = '<li>Erreur lors de l\'analyse des opportunités.</li>';
   }
