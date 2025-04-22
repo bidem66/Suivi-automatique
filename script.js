@@ -6,6 +6,7 @@ const WEALTHSIMPLE = [
   "BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
   "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"
 ];
+const FORCED_TOKENS = ["SOL", "BONK", "WIF", "ADA", "LINK"];
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -105,7 +106,9 @@ async function fetchOpportunities() {
       if (STABLES.includes(sym)) continue;
       const change = t.quotes?.USD?.percent_change_24h || 0;
       const vol = t.quotes?.USD?.volume_24h || 0;
-      if (change > 5 && vol > 100000 && t.rank <= 1000) {
+
+      const forceThis = FORCED_TOKENS.includes(sym);
+      if (forceThis || (change > 2 && vol > 50000 && t.rank <= 1000)) {
         try {
           const mres = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
           const markets = await mres.json();
@@ -162,8 +165,6 @@ async function fetchOpportunities() {
 
         const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
         const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
-
-        if (forecast < 15) continue;
 
         enriched.push({
           name: sym,
