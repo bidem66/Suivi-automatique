@@ -1,5 +1,3 @@
-// script.js complet avec cache CoinPaprika, debug visuel mobile, enrichissement IA, protections API,
-// analyse en parallèle (batch de 5) et sleep réduit à 500ms
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 let cachedPaprika = null;
