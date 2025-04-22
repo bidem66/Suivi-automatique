@@ -63,6 +63,7 @@ async function fetchExchangeRate() {
     return 1.35;
   }
 }
+
 async function fetchCrypto(sym, curr) {
   try {
     const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}USDT`);
@@ -109,9 +110,8 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
-async function fetchOpportunities() {
-  localStorage.removeItem('coinpaprika_cache');
 
+async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
@@ -124,10 +124,16 @@ async function fetchOpportunities() {
   const debugList = document.createElement("ul");
   ul.appendChild(debugList);
 
-  let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
-  const all = (await response.json()).slice(0, 2000);
-  const candidates = [];
+  let cachedList = JSON.parse(localStorage.getItem("coinpaprika_cache") || "null");
+  if (!cachedList || Date.now() - cachedList.ts > 120000) {
+    const res = await safePaprikaFetch(`${PROXY}coinpaprika`);
+    const data = await res.json();
+    cachedList = { ts: Date.now(), data };
+    localStorage.setItem("coinpaprika_cache", JSON.stringify(cachedList));
+  }
+  const all = cachedList.data.slice(0, 2000);
 
+  const candidates = [];
   for (const t of all) {
     const sym = t.symbol.toUpperCase();
     const name = t.name?.toLowerCase() || "";
