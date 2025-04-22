@@ -42,8 +42,7 @@ function trackPaprikaCall() {
 async function safePaprikaFetch(url) {
   while (paprikaCallTimestamps.length >= 9) {
     await sleep(200);
-    const now = Date.now();
-    paprikaCallTimestamps = paprikaCallTimestamps.filter(t => now - t < 1000);
+    paprikaCallTimestamps = paprikaCallTimestamps.filter(t => Date.now() - t < 1000);
   }
   try {
     trackPaprikaCall();
@@ -70,16 +69,15 @@ async function fetchExchangeRate() {
 
 async function fetchCrypto(sym, curr) {
   try {
-    const pair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${pair}`);
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}USDT`);
     const data = await res.json();
-    const usd = parseFloat(data.lastPrice);
-    const change = parseFloat(data.priceChangePercent);
+    const usdPrice = parseFloat(data.lastPrice);
+    const usdChange = parseFloat(data.priceChangePercent);
     if (curr.toUpperCase() === 'CAD') {
       const rate = await fetchExchangeRate();
-      return { price: usd * rate, change, currency: 'CAD' };
+      return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
     }
-    return { price: usd, change, currency: 'USD' };
+    return { price: usdPrice, change: usdChange, currency: 'USD' };
   } catch {
     return null;
   }
@@ -110,15 +108,14 @@ async function addAsset() {
   const inv = parseFloat(document.getElementById('invested').value);
   const curr = document.getElementById('devise').value.toUpperCase();
   if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.');
-  const sym = symInput.toUpperCase();
-  portfolio.push({ type, sym, qty, inv, curr });
+  portfolio.push({ type, sym: symInput.toUpperCase(), qty, inv, curr });
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
 
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
-  ul.innerHTML = '<li>Analyse IA en cours...</li>';
+  ul.innerHTML = '<li>Analyse IA en cours sur 100 cryptos...</li>';
 
   const progress = document.createElement("progress");
   progress.max = 100;
@@ -127,23 +124,25 @@ async function fetchOpportunities() {
   progress.style.height = "10px";
   ul.appendChild(progress);
 
-  const listContainer = document.createElement("div");
-  listContainer.innerHTML = "<strong>Cryptos analysées :</strong><ul id='analyzedList'></ul>";
-  ul.appendChild(listContainer);
+  const debugContainer = document.createElement("div");
+  debugContainer.innerHTML = "<strong>Cryptos analysées :</strong><ul id='analyzedList'></ul>";
+  ul.appendChild(debugContainer);
   const debugList = document.getElementById("analyzedList");
 
-  let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
+  const response = await safePaprikaFetch(`${PROXY}coinpaprika`);
   const all = (await response.json()).slice(0, 2000);
-  const candidates = [];
 
+  const candidates = [];
   for (const t of all) {
     const sym = t.symbol.toUpperCase();
     const name = t.name?.toLowerCase() || "";
     if (STABLES.includes(sym)) continue;
-    if (sym.length < 3 || SUSPECT_WORDS.some(word => name.includes(word))) continue;
+    if (sym.length < 3 || SUSPECT_WORDS.some(w => name.includes(w))) continue;
+
     const vol = t.quotes?.USD?.volume_24h || 0;
     const change = t.quotes?.USD?.percent_change_24h || 0;
     const ratio = (vol / t.quotes?.USD?.market_cap) || 0;
+
     if (change < 2 || vol < 500000 || t.rank > 300 || ratio < 0.01) continue;
 
     try {
@@ -153,8 +152,7 @@ async function fetchOpportunities() {
         m.exchange_name?.toLowerCase().includes('binance') ||
         m.exchange_name?.toLowerCase().includes('ndax')
       );
-      const isOnWealthsimple = WEALTHSIMPLE.includes(sym);
-      if (found || isOnWealthsimple) {
+      if (found || WEALTHSIMPLE.includes(sym)) {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
       }
     } catch {}
@@ -163,17 +161,17 @@ async function fetchOpportunities() {
 
   const enriched = [];
   for (let i = 0; i < candidates.length; i++) {
+    progress.value = i + 1;
     const t = candidates[i];
     const sym = t.symbol.toUpperCase();
     const name = t.name.toLowerCase().replace(/\s+/g, '-');
 
-    progress.value = i + 1;
-    const item = document.createElement("li");
-    item.textContent = sym;
-    debugList.appendChild(item);
+    const li = document.createElement("li");
+    li.textContent = sym;
+    debugList.appendChild(li);
 
     try {
-      const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
+      const [rsi, macd, events, onchain, news1, news2] = await Promise.all([
         safeFetch("taapi", `${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
         safeFetch("taapi", `${PROXY}macd?symbol=${sym}`).then(r => r.json()),
         safeFetch("events", `${PROXY}events?coins=${sym}`).then(r => r.json()),
@@ -183,20 +181,22 @@ async function fetchOpportunities() {
       ]);
 
       const news = news1.articles?.length ? news1 : news2;
-      const rsi = rsiData.value;
-      const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+      const rsiVal = rsi.value;
+      const macdSignal = macd.valueMACD - macd.valueMACDSignal;
       const hasEvent = events?.body?.length > 0;
       const activeAddresses = onchain?.data?.value || 0;
 
-      if (rsi > 70 || macdSignal < 0) continue;
+      if (rsiVal > 70 || macdSignal < 0) continue;
 
-      const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
-      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
-      const eventBoost = hasEvent ? 1.2 : 1;
-      const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
+      const boost = [
+        news.articles?.length > 0 ? 1.2 : 1,
+        (rsiVal < 30 && macdSignal > 0) ? 1.2 : 1,
+        hasEvent ? 1.2 : 1,
+        activeAddresses > 1000 ? 1.2 : 1
+      ];
 
-      const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
-      const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
+      const forecast = t.quotes.USD.percent_change_24h * boost.reduce((a, b) => a * b, 1);
+      const confidence = (boost.reduce((a, b) => a + b, 0) / 4 * 5).toFixed(1);
 
       if (forecast < 15) continue;
 
@@ -210,9 +210,9 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
-      await sleep(800); // protège les API de surcharge
+      await sleep(500);
     } catch (e) {
-      console.warn(`Erreur enrichissement pour ${sym}`);
+      console.warn(`Erreur enrichissement pour ${sym}`, e);
     }
   }
 
@@ -222,12 +222,9 @@ async function fetchOpportunities() {
     return;
   }
 
-  enriched
-    .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
-    .slice(0, 5)
-    .forEach(e => {
-      ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
-    });
+  enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
+    ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+  });
 }
 
 async function refreshAll() {
