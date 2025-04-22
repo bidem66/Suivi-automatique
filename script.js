@@ -5,18 +5,61 @@ const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH
 const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE", "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"];
 const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon", "doge"];
 
+let paprikaCallTimestamps = [];
+let apiTimers = {
+  taapi: [],
+  news: [],
+  events: [],
+  onchain: []
+};
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function fetchAction(sym) {
+function trackApi(api) {
+  const now = Date.now();
+  apiTimers[api].push(now);
+  apiTimers[api] = apiTimers[api].filter(t => now - t < 1000);
+}
+
+async function safeFetch(api, url) {
+  const maxCalls = 5;
+  while (apiTimers[api].length >= maxCalls) {
+    await sleep(250);
+    const now = Date.now();
+    apiTimers[api] = apiTimers[api].filter(t => now - t < 1000);
+  }
   try {
-    const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
-    const data = await res.json();
-    const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
-    return { price: data.c, change, currency: 'USD' };
+    trackApi(api);
+    return await fetch(url);
   } catch {
-    return null;
+    return { json: async () => ({}) };
+  }
+}
+
+function trackPaprikaCall() {
+  const now = Date.now();
+  paprikaCallTimestamps.push(now);
+  paprikaCallTimestamps = paprikaCallTimestamps.filter(t => now - t < 1000);
+}
+
+async function safePaprikaFetch(url) {
+  while (paprikaCallTimestamps.length >= 9) {
+    await sleep(200);
+    const now = Date.now();
+    paprikaCallTimestamps = paprikaCallTimestamps.filter(t => now - t < 1000);
+  }
+  try {
+    trackPaprikaCall();
+    const res = await fetch(url);
+    if (res.status === 429) {
+      await sleep(3000);
+      return safePaprikaFetch(url);
+    }
+    return res;
+  } catch {
+    return { json: async () => [] };
   }
 }
 
@@ -47,6 +90,17 @@ async function fetchCrypto(sym, curr) {
   }
 }
 
+async function fetchAction(sym) {
+  try {
+    const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
+    const data = await res.json();
+    const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
+    return { price: data.c, change, currency: 'USD' };
+  } catch {
+    return null;
+  }
+}
+
 function removeAsset() {
   const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
   portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
@@ -67,38 +121,9 @@ async function addAsset() {
   await refreshAll();
 }
 
-async function getCachedPaprikaData() {
-  const cacheKey = 'coinpaprika_cache';
-  const cache = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-  const now = Date.now();
-  const maxAge = 6 * 60 * 60 * 1000;
-  if (cache.timestamp && now - cache.timestamp < maxAge && cache.data) return cache.data;
-  try {
-    const res = await fetch(`${PROXY}coinpaprika`);
-    const data = await res.json();
-    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data }));
-    return data;
-  } catch (e) {
-    return cache.data || [];
-  }
-}
-
-function getEnrichmentCache(sym) {
-  const key = `ia_enrich_${sym}`;
-  const cache = JSON.parse(localStorage.getItem(key) || '{}');
-  const now = Date.now();
-  if (cache.timestamp && now - cache.timestamp < 6 * 60 * 60 * 1000) return cache.data;
-  return null;
-}
-
-function saveEnrichmentCache(sym, data) {
-  const key = `ia_enrich_${sym}`;
-  localStorage.setItem(key, JSON.stringify({ timestamp: Date.now(), data }));
-}
-
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
-  ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel sur 30 jours...</li>';
+  ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
   const progress = document.createElement("progress");
   progress.max = 30;
@@ -112,7 +137,8 @@ async function fetchOpportunities() {
   ul.appendChild(listContainer);
   const debugList = document.getElementById("analyzedList");
 
-  const all = (await getCachedPaprikaData()).slice(0, 1000);
+  let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
+  const all = (await response.json()).slice(0, 2000);
   const candidates = [];
 
   for (const t of all) {
@@ -126,7 +152,7 @@ async function fetchOpportunities() {
     if (change < 2 || vol < 500000 || t.rank > 300 || ratio < 0.01) continue;
 
     try {
-      const mres = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
+      const mres = await safePaprikaFetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
       const markets = await mres.json();
       const found = markets.find(m =>
         m.exchange_name?.toLowerCase().includes('binance') ||
@@ -140,39 +166,25 @@ async function fetchOpportunities() {
     if (candidates.length >= 30) break;
   }
 
-  if (candidates.length === 0) {
-    ul.innerHTML = '<li>Aucune crypto intéressante trouvée pour l’analyse IA.</li>';
-    return;
-  }
-
   const enriched = [];
-
   for (let i = 0; i < candidates.length; i++) {
     const t = candidates[i];
     const sym = t.symbol.toUpperCase();
-    const cached = getEnrichmentCache(sym);
-    if (cached) {
-      enriched.push(cached);
-      continue;
-    }
+    const name = t.name.toLowerCase().replace(/\s+/g, '-');
 
     progress.value = i + 1;
-    const name = t.name.toLowerCase().replace(/\s+/g, '-');
     const item = document.createElement("li");
     item.textContent = sym;
     debugList.appendChild(item);
 
     try {
-      const [
-        rsiData, macdData, events, onchain,
-        news1, news2
-      ] = await Promise.all([
-        fetch(`${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}macd?symbol=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}events?coins=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}onchain?symbol=${t.symbol}`).then(r => r.json()),
-        fetch(`${PROXY}news?q=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}news?q=${name}`).then(r => r.json())
+      const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
+        safeFetch("taapi", `${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
+        safeFetch("taapi", `${PROXY}macd?symbol=${sym}`).then(r => r.json()),
+        safeFetch("events", `${PROXY}events?coins=${sym}`).then(r => r.json()),
+        safeFetch("onchain", `${PROXY}onchain?symbol=${t.symbol}`).then(r => r.json()),
+        safeFetch("news", `${PROXY}news?q=${sym}`).then(r => r.json()),
+        safeFetch("news", `${PROXY}news?q=${name}`).then(r => r.json())
       ]);
 
       const news = news1.articles?.length ? news1 : news2;
@@ -193,26 +205,17 @@ async function fetchOpportunities() {
 
       if (forecast < 15) continue;
 
-      const label = t.quotes.USD.volume_24h > 5000000 && t.rank < 500
-        ? "Sérieux"
-        : t.quotes.USD.volume_24h > 1000000 && t.rank < 800
-        ? "Moyen"
-        : "Douteux";
-
-      const result = {
+      enriched.push({
         name: sym,
         forecast: `+${forecast.toFixed(1)}%`,
         horizon: "dans les 30 jours",
         confidence,
         platform: t.exchange,
-        label,
         reason: news.articles?.[0]?.title || "Aucune info récente.",
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
-      };
+      });
 
-      saveEnrichmentCache(sym, result);
-      enriched.push(result);
-      await sleep(1500); // pause pour éviter surcharge API
+      await sleep(500);
     } catch (e) {
       console.warn(`Erreur enrichissement pour ${sym}`);
     }
@@ -225,7 +228,7 @@ async function fetchOpportunities() {
   }
 
   enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
-    ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10 — ${e.label}<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
+    ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
   });
 }
 
