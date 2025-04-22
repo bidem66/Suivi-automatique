@@ -1,3 +1,5 @@
+// script.js complet avec cache CoinPaprika, debug visuel mobile, enrichissement IA, protections API,
+// analyse en parallèle (batch de 5) et sleep réduit à 500ms
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 let cachedPaprika = null;
@@ -106,6 +108,61 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
+
+async function enrichCrypto(t, debug) {
+  const sym = t.symbol.toUpperCase();
+  const name = t.name.toLowerCase().replace(/\s+/g, '-');
+  debug.innerText += `Analyse: ${sym}\n`;
+
+  try {
+    const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
+      safeFetch("taapi", `${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
+      safeFetch("taapi", `${PROXY}macd?symbol=${sym}`).then(r => r.json()),
+      safeFetch("events", `${PROXY}events?coins=${sym}`).then(r => r.json()),
+      safeFetch("onchain", `${PROXY}onchain?symbol=${t.symbol}`).then(r => r.json()),
+      safeFetch("news", `${PROXY}news?q=${sym}`).then(r => r.json()),
+      safeFetch("news", `${PROXY}news?q=${name}`).then(r => r.json())
+    ]);
+
+    const news = news1.articles?.length ? news1 : news2;
+    const rsi = rsiData.value;
+    const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+    const hasEvent = events?.body?.length > 0;
+    const activeAddresses = onchain?.data?.value || 0;
+
+    if (rsi > 70 || macdSignal < 0) {
+      debug.innerText += `Rejeté ${sym} (RSI/MACD)\n`;
+      return null;
+    }
+
+    const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
+    const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
+    const eventBoost = hasEvent ? 1.2 : 1;
+    const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
+
+    const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
+    const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
+
+    if (forecast < 15) {
+      debug.innerText += `Rejeté ${sym} (Prévision ${forecast.toFixed(1)}%)\n`;
+      return null;
+    }
+
+    return {
+      name: sym,
+      forecast: `+${forecast.toFixed(1)}%`,
+      horizon: "dans les 30 jours",
+      confidence,
+      platform: t.exchange,
+      reason: news.articles?.[0]?.title || "Aucune info récente.",
+      extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
+    };
+  } catch (e) {
+    debug.innerText += `Erreur enrichissement ${sym}\n`;
+    return null;
+  }
+}
+
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
@@ -132,7 +189,6 @@ async function fetchOpportunities() {
   }
 
   const candidates = [];
-
   for (const t of all) {
     const sym = t.symbol.toUpperCase();
     const name = t.name?.toLowerCase() || "";
@@ -158,62 +214,12 @@ async function fetchOpportunities() {
   }
 
   const enriched = [];
-  for (let i = 0; i < candidates.length; i++) {
-    const t = candidates[i];
-    const sym = t.symbol.toUpperCase();
-    const name = t.name.toLowerCase().replace(/\s+/g, '-');
-
-    progress.value = i + 1;
-    debug.innerText += `Analyse ${i + 1} : ${sym}\n`;
-
-    try {
-      const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
-        safeFetch("taapi", `${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
-        safeFetch("taapi", `${PROXY}macd?symbol=${sym}`).then(r => r.json()),
-        safeFetch("events", `${PROXY}events?coins=${sym}`).then(r => r.json()),
-        safeFetch("onchain", `${PROXY}onchain?symbol=${t.symbol}`).then(r => r.json()),
-        safeFetch("news", `${PROXY}news?q=${sym}`).then(r => r.json()),
-        safeFetch("news", `${PROXY}news?q=${name}`).then(r => r.json())
-      ]);
-
-      const news = news1.articles?.length ? news1 : news2;
-      const rsi = rsiData.value;
-      const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-      const hasEvent = events?.body?.length > 0;
-      const activeAddresses = onchain?.data?.value || 0;
-
-      if (rsi > 70 || macdSignal < 0) {
-        debug.innerText += `Rejeté ${sym} (RSI/MACD)\n`;
-        continue;
-      }
-
-      const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
-      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
-      const eventBoost = hasEvent ? 1.2 : 1;
-      const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
-
-      const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
-      const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
-
-      if (forecast < 15) {
-        debug.innerText += `Rejeté ${sym} (Prévision ${forecast.toFixed(1)}%)\n`;
-        continue;
-      }
-
-      enriched.push({
-        name: sym,
-        forecast: `+${forecast.toFixed(1)}%`,
-        horizon: "dans les 30 jours",
-        confidence,
-        platform: t.exchange,
-        reason: news.articles?.[0]?.title || "Aucune info récente.",
-        extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
-      });
-
-      await sleep(1200);
-    } catch (e) {
-      debug.innerText += `Erreur enrichissement ${sym}\n`;
-    }
+  for (let i = 0; i < candidates.length; i += 5) {
+    const batch = candidates.slice(i, i + 5);
+    const results = await Promise.all(batch.map(c => enrichCrypto(c, debug)));
+    enriched.push(...results.filter(Boolean));
+    progress.value = ((i + 5) / candidates.length) * 100;
+    await sleep(500);
   }
 
   ul.innerHTML = '';
