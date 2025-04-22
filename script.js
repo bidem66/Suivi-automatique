@@ -1,3 +1,4 @@
+// script.js complet et à jour
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
@@ -6,6 +7,12 @@ const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE",
 const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon", "doge"];
 
 let paprikaCallTimestamps = [];
+let apiTimers = {
+  taapi: [],
+  news: [],
+  events: [],
+  onchain: []
+};
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -17,9 +24,22 @@ function trackCall(list) {
   return list.filter(t => now - t < 1000);
 }
 
+async function safeFetch(api, url) {
+  while (apiTimers[api].length >= 5) {
+    await sleep(300);
+    apiTimers[api] = trackCall(apiTimers[api]);
+  }
+  try {
+    apiTimers[api] = trackCall(apiTimers[api]);
+    return await fetch(url);
+  } catch {
+    return { json: async () => ({}) };
+  }
+}
+
 async function safePaprikaFetch(url) {
   while (paprikaCallTimestamps.length >= 9) {
-    await sleep(200);
+    await sleep(300);
     paprikaCallTimestamps = trackCall(paprikaCallTimestamps);
   }
   try {
@@ -47,8 +67,7 @@ async function fetchExchangeRate() {
 
 async function fetchCrypto(sym, curr) {
   try {
-    const symbolPair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
+    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}USDT`);
     const data = await res.json();
     const usdPrice = parseFloat(data.lastPrice);
     const usdChange = parseFloat(data.priceChangePercent);
@@ -95,7 +114,6 @@ async function addAsset() {
 
 async function fetchOpportunities() {
   localStorage.removeItem('coinpaprika_cache');
-
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
@@ -103,7 +121,6 @@ async function fetchOpportunities() {
   progress.max = 100;
   progress.value = 0;
   progress.style.width = "100%";
-  progress.style.height = "10px";
   ul.appendChild(progress);
 
   const listContainer = document.createElement("div");
@@ -153,12 +170,12 @@ async function fetchOpportunities() {
 
     try {
       const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
-        fetch(`${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}macd?symbol=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}events?coins=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}onchain?symbol=${t.symbol}`).then(r => r.json()),
-        fetch(`${PROXY}news?q=${sym}`).then(r => r.json()),
-        fetch(`${PROXY}news?q=${name}`).then(r => r.json())
+        safeFetch("taapi", `${PROXY}rsi?symbol=${sym}`).then(r => r.json()),
+        safeFetch("taapi", `${PROXY}macd?symbol=${sym}`).then(r => r.json()),
+        safeFetch("events", `${PROXY}events?coins=${sym}`).then(r => r.json()),
+        safeFetch("onchain", `${PROXY}onchain?symbol=${t.symbol}`).then(r => r.json()),
+        safeFetch("news", `${PROXY}news?q=${sym}`).then(r => r.json()),
+        safeFetch("news", `${PROXY}news?q=${name}`).then(r => r.json())
       ]);
 
       const news = news1.articles?.length ? news1 : news2;
@@ -189,7 +206,7 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
-      await sleep(1440);
+      await sleep(1200);
     } catch (e) {
       console.warn(`Erreur enrichissement pour ${sym}`);
     }
