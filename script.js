@@ -1,4 +1,3 @@
-// script.js complet avec cache CoinPaprika, debug visuel mobile, enrichissement IA et protections API
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 let cachedPaprika = null;
@@ -107,25 +106,24 @@ async function addAsset() {
   localStorage.setItem('portfolio', JSON.stringify(portfolio));
   await refreshAll();
 }
-
 async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
+
   const progress = document.createElement("progress");
+  progress.max = 100;
+  progress.value = 0;
   progress.style.width = "100%";
   ul.appendChild(progress);
 
   const debugBox = document.createElement("div");
   debugBox.innerHTML = "<h4>Debug :</h4><div id='debugText' style='white-space:pre-wrap; font-size:12px; background:#222; color:#0f0; padding:10px; max-height:300px; overflow:auto;'></div>";
   ul.appendChild(debugBox);
-
-  setTimeout(() => {
-    window.debug = document.getElementById("debugText");
-  }, 50);
+  const debug = document.getElementById("debugText");
 
   let all;
   if (cachedPaprika) {
-    window.debug.innerText += "Cache CoinPaprika utilisé\n";
+    debug.innerText += "Cache CoinPaprika utilisé\n";
     all = cachedPaprika;
   } else {
     const response = await safePaprikaFetch(`${PROXY}coinpaprika`);
@@ -134,9 +132,10 @@ async function fetchOpportunities() {
   }
 
   const candidates = [];
+
   for (const t of all) {
     const sym = t.symbol.toUpperCase();
-    const name = (t.name || "").toLowerCase();
+    const name = t.name?.toLowerCase() || "";
     if (STABLES.includes(sym)) continue;
     if (sym.length < 3 || SUSPECT_WORDS.some(word => name.includes(word))) continue;
     const vol = t.quotes?.USD?.volume_24h || 0;
@@ -153,19 +152,19 @@ async function fetchOpportunities() {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
       }
     } catch (e) {
-      window.debug.innerText += `Erreur marché pour ${sym}\n`;
+      debug.innerText += `Erreur marché pour ${sym}\n`;
     }
     if (candidates.length >= 100) break;
   }
 
-  progress.max = candidates.length;
   const enriched = [];
   for (let i = 0; i < candidates.length; i++) {
     const t = candidates[i];
     const sym = t.symbol.toUpperCase();
-    const name = (t.name || '').toLowerCase().replace(/\s+/g, '-');
+    const name = t.name.toLowerCase().replace(/\s+/g, '-');
+
     progress.value = i + 1;
-    window.debug.innerText += `Analyse ${i + 1} : ${sym}\n`;
+    debug.innerText += `Analyse ${i + 1} : ${sym}\n`;
 
     try {
       const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
@@ -184,7 +183,7 @@ async function fetchOpportunities() {
       const activeAddresses = onchain?.data?.value || 0;
 
       if (rsi > 70 || macdSignal < 0) {
-        window.debug.innerText += `Rejeté ${sym} (RSI/MACD)\n`;
+        debug.innerText += `Rejeté ${sym} (RSI/MACD)\n`;
         continue;
       }
 
@@ -197,7 +196,7 @@ async function fetchOpportunities() {
       const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
 
       if (forecast < 15) {
-        window.debug.innerText += `Rejeté ${sym} (Prévision ${forecast.toFixed(1)}%)\n`;
+        debug.innerText += `Rejeté ${sym} (Prévision ${forecast.toFixed(1)}%)\n`;
         continue;
       }
 
@@ -213,7 +212,7 @@ async function fetchOpportunities() {
 
       await sleep(1200);
     } catch (e) {
-      window.debug.innerText += `Erreur enrichissement ${sym}\n`;
+      debug.innerText += `Erreur enrichissement ${sym}\n`;
     }
   }
 
@@ -226,6 +225,51 @@ async function fetchOpportunities() {
   enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
     ul.innerHTML += `<li><strong>${e.name}</strong> (${e.platform}) : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
   });
+}
+
+async function refreshAll() {
+  const tbodyA = document.getElementById("tableAction");
+  const tbodyC = document.getElementById("tableCrypto");
+  const advice = document.getElementById("adviceList");
+  const perf = document.getElementById("globalPerf");
+  tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = "";
+
+  let inv = 0, val = 0;
+  const enriched = await Promise.all(portfolio.map(async (a) => {
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
+    return { ...a, info };
+  }));
+
+  const sorted = enriched.filter(e => e.info).sort((a, b) => b.info.change - a.info.change);
+
+  for (let a of sorted) {
+    const info = a.info;
+    const value = info.price * a.qty;
+    const gain = value - a.inv;
+    const change = info.change?.toFixed(2) || "0.00";
+    const gainClass = gain >= 0 ? 'gain' : 'perte';
+    const sign = gain >= 0 ? '+' : '-';
+    inv += a.inv;
+    val += value;
+    const row = `<tr>
+      <td>${a.sym.toUpperCase()}</td>
+      <td>${a.qty}</td>
+      <td>${a.inv.toFixed(2)}</td>
+      <td>${info.price.toFixed(2)}</td>
+      <td>${value.toFixed(2)}</td>
+      <td class="${gainClass}">${sign}${Math.abs(change)}%</td>
+      <td>${info.currency}</td>
+    </tr>`;
+    (a.type === 'crypto' ? tbodyC : tbodyA).innerHTML += row;
+    advice.innerHTML += `<li><strong>${a.sym.toUpperCase()}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
+  }
+
+  const totalGain = val - inv;
+  const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
+  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
+
+  await fetchOpportunities();
 }
 
 window.onload = () => {
