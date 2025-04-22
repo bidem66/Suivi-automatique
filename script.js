@@ -1,4 +1,4 @@
-// script.js avec barre de progression IA pendant l'enrichissement des opportunités
+// script.js avec barre de chargement fonctionnelle et filtre corrigé (change > 5%)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -102,7 +102,7 @@ async function fetchOpportunities() {
       if (STABLES.includes(sym)) continue;
       const change = t.quotes?.USD?.percent_change_24h || 0;
       const vol = t.quotes?.USD?.volume_24h || 0;
-      if (change > 10 && vol > 100000 && t.rank <= 1000) {
+      if (change > 5 && vol > 100000 && t.rank <= 1000) {
         try {
           const mres = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`);
           const markets = await mres.json();
@@ -111,6 +111,11 @@ async function fetchOpportunities() {
         } catch {}
       }
       if (candidates.length >= 30) break;
+    }
+
+    if (candidates.length === 0) {
+      ul.innerHTML = '<li>Aucune crypto intéressante trouvée pour l'analyse IA.</li>';
+      return;
     }
 
     const enriched = [];
