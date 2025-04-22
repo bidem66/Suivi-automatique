@@ -1,4 +1,4 @@
-// script.js complet avec enrichissement IA, barre de progression et compteur
+// script.js avec affichage des erreurs IA visibles dans le dashboard (mobile friendly)
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -81,7 +81,6 @@ async function getCachedPaprikaData() {
     localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data }));
     return data;
   } catch (e) {
-    console.warn("Erreur CoinPaprika. Utilisation du cache si dispo.");
     return cache.data || [];
   }
 }
@@ -100,6 +99,12 @@ async function fetchOpportunities() {
   progressText.textContent = '0 / 20 analysées';
   ul.appendChild(progressText);
 
+  const debugDiv = document.createElement('div');
+  debugDiv.style.marginTop = '15px';
+  debugDiv.style.fontSize = '0.8rem';
+  debugDiv.style.color = 'darkred';
+  ul.appendChild(debugDiv);
+
   try {
     const all = (await getCachedPaprikaData()).slice(0, 500);
     const filtered = all
@@ -114,45 +119,81 @@ async function fetchOpportunities() {
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
 
+      debugDiv.innerHTML += `<div style='font-weight:bold;'>→ Analyse ${sym}</div>`;
+      let success = 0;
+      let news = {}, rsiData = {}, macdData = {}, events = {}, onchain = {};
+
       try {
-        const [newsRes, rsiRes, macdRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}news?q=${name}`),
-          fetch(`${PROXY}rsi?symbol=${sym}`),
-          fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`${PROXY}events?coins=${sym}`),
-          fetch(`${PROXY}onchain?symbol=${t.symbol}`)
-        ]);
-
-        const news = await newsRes.json();
-        const rsiData = await rsiRes.json();
-        const macdData = await macdRes.json();
-        const events = await eventRes.json();
-        const onchain = await onchainRes.json();
-
-        const rsi = rsiData.value;
-        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const hasEvent = events?.body?.length > 0;
-        const activeAddresses = onchain?.data?.value || 0;
-
-        const sentimentBoost = news.articles.length > 0 ? 1.2 : 1;
-        const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
-        const eventBoost = hasEvent ? 1.2 : 1;
-        const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
-
-        const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
-        const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
-
-        enriched.push({
-          name: sym,
-          forecast: `+${forecast.toFixed(1)}%`,
-          horizon: "2-4 jours",
-          confidence,
-          reason: news.articles[0]?.title || "Aucune info récente.",
-          extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
-        });
+        const res = await fetch(`${PROXY}news?q=${name}`);
+        news = await res.json();
+        debugDiv.innerHTML += `<div>[${sym}] ✓ News OK</div>`; success++;
       } catch (e) {
-        console.warn(`Erreur enrichissement pour ${sym}:`, e);
+        debugDiv.innerHTML += `<div>[${sym}] ✗ News: ${e.message}</div>`;
       }
+
+      try {
+        const res = await fetch(`${PROXY}rsi?symbol=${sym}`);
+        rsiData = await res.json();
+        debugDiv.innerHTML += `<div>[${sym}] ✓ RSI OK</div>`; success++;
+      } catch (e) {
+        debugDiv.innerHTML += `<div>[${sym}] ✗ RSI: ${e.message}</div>`;
+      }
+
+      try {
+        const res = await fetch(`${PROXY}macd?symbol=${sym}`);
+        macdData = await res.json();
+        debugDiv.innerHTML += `<div>[${sym}] ✓ MACD OK</div>`; success++;
+      } catch (e) {
+        debugDiv.innerHTML += `<div>[${sym}] ✗ MACD: ${e.message}</div>`;
+      }
+
+      try {
+        const res = await fetch(`${PROXY}events?coins=${sym}`);
+        events = await res.json();
+        debugDiv.innerHTML += `<div>[${sym}] ✓ Events OK</div>`; success++;
+      } catch (e) {
+        debugDiv.innerHTML += `<div>[${sym}] ✗ Events: ${e.message}</div>`;
+      }
+
+      try {
+        const res = await fetch(`${PROXY}onchain?symbol=${t.symbol}`);
+        onchain = await res.json();
+        debugDiv.innerHTML += `<div>[${sym}] ✓ Onchain OK</div>`; success++;
+      } catch (e) {
+        debugDiv.innerHTML += `<div>[${sym}] ✗ Onchain: ${e.message}</div>`;
+      }
+
+      if (success < 3) {
+        debugDiv.innerHTML += `<div>[${sym}] Trop peu de données, crypto ignorée.</div><br/>`;
+        progressBar.value = i + 1;
+        progressText.textContent = `${i + 1} / 20 analysées`;
+        await sleep(1500);
+        continue;
+      }
+
+      const rsi = rsiData.value;
+      const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+      const hasEvent = events?.body?.length > 0;
+      const activeAddresses = onchain?.data?.value || 0;
+
+      const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
+      const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
+      const eventBoost = hasEvent ? 1.2 : 1;
+      const onchainBoost = activeAddresses > 1000 ? 1.2 : 1;
+
+      const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
+      const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
+
+      enriched.push({
+        name: sym,
+        forecast: `+${forecast.toFixed(1)}%`,
+        horizon: "2-4 jours",
+        confidence,
+        reason: news.articles?.[0]?.title || "Aucune info récente.",
+        extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
+      });
+
+      debugDiv.innerHTML += `<div>[${sym}] Ajouté avec succès (${success}/5)</div><hr/>`;
 
       progressBar.value = i + 1;
       progressText.textContent = `${i + 1} / 20 analysées`;
@@ -168,8 +209,9 @@ async function fetchOpportunities() {
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu d'ici ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
+
+    ul.appendChild(debugDiv);
   } catch (err) {
-    console.error("Erreur globale CoinPaprika", err);
     ul.innerHTML = '<li>Erreur lors de l\'analyse des opportunités.</li>';
   }
 }
