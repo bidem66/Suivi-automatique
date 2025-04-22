@@ -1,3 +1,5 @@
+// script.js avec barre de progression IA pendant l'enrichissement des opportunités
+
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
@@ -84,12 +86,12 @@ async function fetchOpportunities() {
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel sur 30 jours...</li>';
 
-  const debugDiv = document.createElement('div');
-  debugDiv.id = 'debugIA';
-  debugDiv.style.marginTop = '10px';
-  debugDiv.style.fontSize = '0.8rem';
-  debugDiv.style.color = 'darkred';
-  ul.appendChild(debugDiv);
+  const progress = document.createElement("progress");
+  progress.max = 30;
+  progress.value = 0;
+  progress.style.width = "100%";
+  progress.style.height = "10px";
+  ul.appendChild(progress);
 
   try {
     const all = (await getCachedPaprikaData()).slice(0, 1000);
@@ -113,10 +115,10 @@ async function fetchOpportunities() {
 
     const enriched = [];
     for (let i = 0; i < candidates.length; i++) {
+      progress.value = i + 1;
       const t = candidates[i];
       const sym = t.symbol.toUpperCase();
       const name = t.name.toLowerCase().replace(/\s+/g, '-');
-      debugDiv.innerHTML += `<div>→ Analyse ${sym} (${t.exchange})</div>`;
 
       try {
         let news = {};
@@ -158,7 +160,7 @@ async function fetchOpportunities() {
           extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
         });
       } catch (e) {
-        debugDiv.innerHTML += `<div>[${sym}] Erreur enrichissement</div>`;
+        console.warn(`Erreur enrichissement pour ${sym}`);
       }
     }
 
@@ -168,7 +170,6 @@ async function fetchOpportunities() {
       return;
     }
 
-    document.getElementById('debugIA')?.remove();
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
@@ -218,7 +219,6 @@ async function refreshAll() {
   const totalPct = inv ? (totalGain / inv * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
-
   await fetchOpportunities();
 }
 
