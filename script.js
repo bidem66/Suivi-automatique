@@ -1,4 +1,4 @@
-// script.js filtré pour cryptos explosifs (hausse >10% 24h, pas de stablecoins ni BTC/ETH)
+// script.js – IA corrigée : score dynamique + actualités fiables
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -121,20 +121,14 @@ async function fetchOpportunities() {
       debugDiv.innerHTML += `<div>→ Analyse ${sym} (${t.exchange})</div>`;
 
       try {
-        const [newsRes, rsiRes, macdRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}news?q=${name}`),
-          fetch(`${PROXY}rsi?symbol=${sym}`),
-          fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`${PROXY}events?coins=${sym}`),
-          fetch(`${PROXY}onchain?symbol=${t.symbol}`)
-        ]);
+        let news = await (await fetch(`${PROXY}news?q=${sym}`)).json();
+        if (!news.articles?.length) news = await (await fetch(`${PROXY}news?q=${name}`)).json();
 
-        const news = await newsRes.json();
-        const rsi = (await rsiRes.json()).value;
-        const macdData = await macdRes.json();
+        const rsi = (await (await fetch(`${PROXY}rsi?symbol=${sym}`)).json()).value;
+        const macdData = await (await fetch(`${PROXY}macd?symbol=${sym}`)).json();
         const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const events = await eventRes.json();
-        const onchain = await onchainRes.json();
+        const events = await (await fetch(`${PROXY}events?coins=${sym}`)).json();
+        const onchain = await (await fetch(`${PROXY}onchain?symbol=${t.symbol}`)).json();
 
         const hasEvent = events?.body?.length > 0;
         const activeAddresses = onchain?.data?.value || 0;
@@ -147,7 +141,7 @@ async function fetchOpportunities() {
         const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
         const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
 
-        if (forecast < 15) continue; // ignorer si forecast trop faible
+        if (forecast < 15) continue;
 
         enriched.push({
           name: sym,
@@ -169,7 +163,6 @@ async function fetchOpportunities() {
     }
 
     document.getElementById('debugIA')?.remove();
-
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast)).slice(0, 5).forEach(e => {
       ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast} attendu ${e.horizon}<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em><br/>${e.extra}</li>`;
     });
