@@ -1,4 +1,4 @@
-// script.js complet et à jour
+// script.js complet et à jour avec enrichissement étendu et protection API
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
