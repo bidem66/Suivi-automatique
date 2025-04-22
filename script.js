@@ -1,13 +1,16 @@
-<script>
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
+
 const STABLES = ["BTC", "ETH", "USDT", "USDC", "DAI", "TUSD", "BNB", "XRP", "BCH", "LTC"];
 const WEALTHSIMPLE = ["BTC", "ETH", "SOL", "ADA", "LINK", "AVAX", "DOT", "PEPE", "PYTH", "BONK", "WIF", "DOGE", "MATIC", "XLM"];
 const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon", "doge"];
+
 let paprikaCallTimestamps = [];
 let apiTimers = { taapi: [], news: [], events: [], onchain: [] };
 
-function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 function trackCall(list) {
   const now = Date.now();
@@ -104,21 +107,20 @@ async function addAsset() {
 }
 
 async function fetchOpportunities() {
+  localStorage.removeItem('coinpaprika_cache');
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
+
   const progress = document.createElement("progress");
   progress.max = 100;
   progress.value = 0;
   progress.style.width = "100%";
   ul.appendChild(progress);
 
-  const debugList = document.createElement("ul");
-  debugList.style.maxHeight = "200px";
-  debugList.style.overflowY = "scroll";
-  debugList.style.fontSize = "0.8em";
-  debugList.style.background = "#f8f8f8";
-  debugList.style.border = "1px solid #ccc";
-  ul.appendChild(debugList);
+  const debugBox = document.createElement("div");
+  debugBox.innerHTML = "<h4>Debug :</h4><div id='debugText' style='white-space:pre-wrap; font-size:12px; background:#222; color:#0f0; padding:10px; max-height:300px; overflow:auto;'></div>";
+  ul.appendChild(debugBox);
+  const debug = document.getElementById("debugText");
 
   let response = await safePaprikaFetch(`${PROXY}coinpaprika`);
   const all = (await response.json()).slice(0, 2000);
@@ -145,7 +147,9 @@ async function fetchOpportunities() {
       if (found || isOnWealthsimple) {
         candidates.push({ ...t, exchange: found?.exchange_name || 'Wealthsimple' });
       }
-    } catch {}
+    } catch (e) {
+      debug.innerText += `Erreur marché pour ${sym}\n`;
+    }
     if (candidates.length >= 100) break;
   }
 
@@ -154,10 +158,9 @@ async function fetchOpportunities() {
     const t = candidates[i];
     const sym = t.symbol.toUpperCase();
     const name = t.name.toLowerCase().replace(/\s+/g, '-');
+
     progress.value = i + 1;
-    const item = document.createElement("li");
-    item.textContent = sym;
-    debugList.appendChild(item);
+    debug.innerText += `Analyse ${i + 1} : ${sym}\n`;
 
     try {
       const [rsiData, macdData, events, onchain, news1, news2] = await Promise.all([
@@ -175,7 +178,10 @@ async function fetchOpportunities() {
       const hasEvent = events?.body?.length > 0;
       const activeAddresses = onchain?.data?.value || 0;
 
-      if (rsi > 70 || macdSignal < 0) continue;
+      if (rsi > 70 || macdSignal < 0) {
+        debug.innerText += `Rejeté ${sym} (RSI/MACD)\n`;
+        continue;
+      }
 
       const sentimentBoost = news.articles?.length > 0 ? 1.2 : 1;
       const indicatorBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
@@ -184,7 +190,11 @@ async function fetchOpportunities() {
 
       const forecast = t.quotes.USD.percent_change_24h * sentimentBoost * indicatorBoost * eventBoost * onchainBoost;
       const confidence = ((sentimentBoost + indicatorBoost + eventBoost + onchainBoost) / 4 * 5).toFixed(1);
-      if (forecast < 15) continue;
+
+      if (forecast < 15) {
+        debug.innerText += `Rejeté ${sym} (Prévision ${forecast.toFixed(1)}%)\n`;
+        continue;
+      }
 
       enriched.push({
         name: sym,
@@ -196,9 +206,9 @@ async function fetchOpportunities() {
         extra: hasEvent ? `Événement: ${events.body[0].title}` : ""
       });
 
-      await sleep(1000);
+      await sleep(1200);
     } catch (e) {
-      console.warn(`Erreur enrichissement pour ${sym}`, e);
+      debug.innerText += `Erreur enrichissement ${sym}\n`;
     }
   }
 
@@ -227,6 +237,7 @@ async function refreshAll() {
   }));
 
   const sorted = enriched.filter(e => e.info).sort((a, b) => b.info.change - a.info.change);
+
   for (let a of sorted) {
     const info = a.info;
     const value = info.price * a.qty;
@@ -260,4 +271,3 @@ async function refreshAll() {
 window.onload = () => {
   refreshAll();
 };
-</script>
