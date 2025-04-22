@@ -1,5 +1,4 @@
-<!DOCTYPE html>
-<html lang="fr">
+<!-- index.html --><!DOCTYPE html><html lang="fr">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
@@ -45,6 +44,17 @@
     .gain { color: green; }
     .perte { color: red; }
     #globalPerf { font-weight: bold; margin-bottom: 10px; }
+    #debugConsole {
+      font-size: 0.8rem;
+      color: darkred;
+      max-height: 200px;
+      overflow-y: auto;
+      width: 1000px;
+      background: #fff;
+      padding: 10px;
+      border: 1px solid #ccc;
+      margin-bottom: 20px;
+    }
   </style>
 </head>
 <body>
@@ -65,22 +75,44 @@
     <input id="removeSymbol" placeholder="Symbole à supprimer" />
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
-  </div>
-  <div id="globalPerf"></div>
-  <h2>Actions</h2>
+  </div>  <div id="globalPerf"></div>  <h2>Actions</h2>
   <table>
-    <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th>
+        <th>Valeur</th><th>Variation</th><th>Devise</th>
+      </tr>
+    </thead>
     <tbody id="tableAction"></tbody>
-  </table>
-  <h2>Cryptos</h2>
+  </table>  <h2>Cryptos</h2>
   <table>
-    <thead><tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr></thead>
+    <thead>
+      <tr>
+        <th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th>
+        <th>Valeur</th><th>Variation</th><th>Devise</th>
+      </tr>
+    </thead>
     <tbody id="tableCrypto"></tbody>
-  </table>
-  <h2>Opportunités du moment</h2>
-  <ul id="opportunities"></ul>
-  <h2>Conseils personnalisés</h2>
-  <ul id="adviceList"></ul>
-  <script src="script.js"></script>
-</body>
-</html>
+  </table>  <h2>Opportunités du moment</h2>
+  <ul id="opportunities"></ul>  <h2>Conseils personnalisés</h2>
+  <ul id="adviceList"></ul>  <h2>Debug</h2>
+  <div id="debugConsole"></div>  <script src="script.js"></script></body>
+</html>// script.js const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/'; let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]'); const STABLES = ["BTC","ETH","USDT","USDC","DAI","TUSD","BNB","XRP","BCH","LTC"];
+
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+
+function debug(msg) { const el = document.getElementById('debugConsole'); el.innerHTML += ${new Date().toLocaleTimeString()} - ${msg}<br>; }
+
+async function fetchAction(sym) { try { const res = await fetch(${PROXY}finnhub?symbol=${sym.toUpperCase()}); const data = await res.json(); const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0; return { price: data.c, change, currency: 'USD' }; } catch (err) { debug(fetchAction ${sym} error: ${err.message}); return null; } }
+
+async function fetchExchangeRate() { try { const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD"); const data = await res.json(); return data.rates?.CAD || 1.35; } catch { debug('fetchExchangeRate failed, using 1.35'); return 1.35; } }
+
+async function fetchCrypto(sym, curr) { try { const symbolPair = sym.toUpperCase() + 'USDT'; const res = await fetch(https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}); const data = await res.json(); const usdPrice = parseFloat(data.lastPrice); const usdChange = parseFloat(data.priceChangePercent); if (curr.toUpperCase() === 'CAD') { const rate = await fetchExchangeRate(); return { price: usdPrice * rate, change: usdChange, currency: 'CAD' }; } return { price: usdPrice, change: usdChange, currency: 'USD' }; } catch (err) { debug(fetchCrypto ${sym} error: ${err.message}); return null; } }
+
+function removeAsset() { const sym = document.getElementById('removeSymbol').value.trim().toLowerCase(); portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym); localStorage.setItem('portfolio', JSON.stringify(portfolio)); refreshAll(); }
+
+async function addAsset() { const type = document.getElementById('type').value; const symInput = document.getElementById('symbol').value.trim(); const qty = parseFloat(document.getElementById('quantity').value); const inv = parseFloat(document.getElementById('invested').value); const curr = document.getElementById('devise').value.toUpperCase(); if (!symInput || !qty || !inv) return alert('Tous les champs sont requis.'); const sym = symInput.toUpperCase(); portfolio.push({ type, sym, qty, inv, curr }); localStorage.setItem('portfolio', JSON.stringify(portfolio)); await refreshAll(); }
+
+async function getCachedPaprikaData() { const key = 'coinpaprika_cache'; const cache = JSON.parse(localStorage.getItem(key) || '{}'); const now = Date.now(); const maxAge = 6 * 60 * 60 * 1000; if (cache.timestamp && now - cache.timestamp < maxAge) return cache.data; try { const res = await fetch(${PROXY}coinpaprika); const data = await res.json(); localStorage.setItem(key, JSON.stringify({ timestamp: now, data })); return data; } catch (err) { debug('getCachedPaprikaData error: ' + err.message); return cache.data || []; } }
+
+async function fetchOpportunities() { const ul = document.getElementById("opportunities"); ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel sur 30 jours...</li>'; try { const all = (await getCachedPaprikaData()).slice(0, 1000); const candidates = []; for (const t of all) { const sym = t.symbol.toUpperCase(); if (STABLES.includes(sym)) continue; const change = t.quotes?.USD?.percent_change_24h || 0; const vol = t.quotes?.USD?.volume_24h || 0; if (change > 10 && vol > 100000 && t.rank <= 1000) candidates.push(t); } const enriched = []; for (let t of candidates) { const sym = t.symbol.toUpperCase(); debug(IA analyse start for ${sym}); try { const [newsRes, rsiRes, macdRes, eventRes, onchainRes] = await Promise.all([ fetch(${PROXY}news?q=${encodeURIComponent(t.name)}), fetch(${PROXY}rsi?symbol=${sym}), fetch(${PROXY}macd?symbol=${sym}), fetch(${PROXY}events?coins=${sym}), fetch(${PROXY}onchain?symbol=${sym}) ]); const news = await newsRes.json(); const rsi = (await rsiRes.json()).value; const macdData = await macdRes.json(); const macdSignal = macdData.valueMACD - macdData.valueMACDSignal; const events = await eventRes.json(); const onchain = await onchainRes.json(); const hasEvent = events?.body?.length > 0; const activeAddr = onchain?.data?.value || 0; const boosts = [ news.articles?.length ? 1.2 : 1, rsi < 30 && m indrukwekkOthers...
