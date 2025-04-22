@@ -1,10 +1,15 @@
-name: Déploiement manuel vers GitHub Pages
+name: Déploiement avec cache buster
 
 on:
-  workflow_dispatch:  # Déclencheur manuel uniquement
+  push:
+    branches:
+      - main
+    paths:
+      - 'index.html'
+      - 'script.js'
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -12,16 +17,29 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Récupération du dépôt
+      - name: Cloner le dépôt
         uses: actions/checkout@v4
 
-      - name: Configuration de GitHub Pages
+      - name: Ajouter un cache buster à script.js
+        run: |
+          ts=$(date +%s)
+          sed -i 's|<script src="script.js[^"]*"></script>|<script src="script.js?v='"$ts"'"></script>|' index.html
+
+      - name: Commit auto du cache buster
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add index.html
+          git commit -m "🔁 Cache buster script.js [$ts]" || echo "Pas de changement"
+          git push || echo "Déjà à jour"
+
+      - name: Config Pages
         uses: actions/configure-pages@v4
 
-      - name: Téléverser le contenu vers GitHub Pages
+      - name: Upload des fichiers
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
 
-      - name: Déployer vers GitHub Pages
+      - name: Déploiement
         uses: actions/deploy-pages@v4
