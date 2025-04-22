@@ -6,27 +6,64 @@
   <meta name="viewport" content="width=device-width, initial-scale=0.85" />
   <title>Dashboard Portefeuille</title>
   <style>
-    body { font-family: sans-serif; margin: 0; padding: 20px; background: #f5f7fa; display: flex; flex-direction: column; align-items: center; }
+    body { 
+      font-family: sans-serif; 
+      margin: 0; 
+      padding: 20px; 
+      background: #f5f7fa; 
+      display: flex; 
+      flex-direction: column; 
+      align-items: center; 
+    }
     h1, h2 { text-align: center; }
-    .controls, table { max-width: 1000px; width: 100%; margin: 20px 0; }
-    .controls { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
-    .controls input, .controls select, .controls button { padding: 10px; margin: 5px; width: 100%; }
-    table { border-collapse: collapse; background: #fff; font-size: 0.75rem; zoom: 0.75; }
-    th, td { border: 1px solid #ccc; padding: 4px; text-align: center; }
+    .controls, table { 
+      max-width: 1000px; 
+      width: 100%; 
+      margin: 20px 0; 
+    }
+    .controls { 
+      display: grid; 
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); 
+      gap: 10px; 
+    }
+    .controls input, 
+    .controls select, 
+    .controls button { 
+      padding: 10px; 
+      margin: 5px; 
+      width: 100%; 
+    }
+    table { 
+      border-collapse: collapse; 
+      background: #fff; 
+      font-size: 0.75rem; 
+      zoom: 0.75; 
+    }
+    th, td { 
+      border: 1px solid #ccc; 
+      padding: 4px; 
+      text-align: center; 
+    }
     th { background: #eee; }
     .gain { color: green; }
     .perte { color: red; }
-    #globalPerf { font-weight: bold; margin-bottom: 10px; }
+    #globalPerf { 
+      font-weight: bold; 
+      margin-bottom: 10px; 
+    }
     #debugConsole { 
       font-size: 0.8rem; 
       color: darkred; 
       max-height: 200px; 
       overflow-y: auto; 
-      width: 1000px; 
-      background: #fff; 
+      width: 100%; 
+      box-sizing: border-box; 
       padding: 10px; 
+      background: #fff; 
       border: 1px solid #ccc; 
       margin-bottom: 20px; 
+      white-space: pre-wrap; 
+      word-break: break-word; 
     }
   </style>
 </head>
@@ -55,7 +92,15 @@
   <h2>Actions</h2>
   <table>
     <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+      <tr>
+        <th>Symbole</th>
+        <th>Qté</th>
+        <th>Investi</th>
+        <th>Prix</th>
+        <th>Valeur</th>
+        <th>Variation</th>
+        <th>Devise</th>
+      </tr>
     </thead>
     <tbody id="tableAction"></tbody>
   </table>
@@ -63,7 +108,15 @@
   <h2>Cryptos</h2>
   <table>
     <thead>
-      <tr><th>Symbole</th><th>Qté</th><th>Investi</th><th>Prix</th><th>Valeur</th><th>Variation</th><th>Devise</th></tr>
+      <tr>
+        <th>Symbole</th>
+        <th>Qté</th>
+        <th>Investi</th>
+        <th>Prix</th>
+        <th>Valeur</th>
+        <th>Variation</th>
+        <th>Devise</th>
+      </tr>
     </thead>
     <tbody id="tableCrypto"></tbody>
   </table>
