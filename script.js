@@ -1,3 +1,4 @@
+// script complet avec cache local CoinPaprika pour accélérer les opportunités
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 
@@ -7,6 +8,7 @@ const SUSPECT_WORDS = ["fart", "rug", "broccoli", "baby", "shit", "moon", "elon"
 
 let paprikaCallTimestamps = [];
 let apiTimers = { taapi: [], news: [], events: [], onchain: [] };
+let paprikaCache = { allCoins: { timestamp: 0, data: [] } };
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -31,19 +33,36 @@ async function safeFetch(api, url) {
   }
 }
 
-async function safePaprikaFetch(url) {
+async function safePaprikaFetch(url, useCache = false) {
+  const isAllCoins = url.includes("coinpaprika") && !url.includes("markets");
+
+  if (useCache && isAllCoins && Date.now() - paprikaCache.allCoins.timestamp < 10 * 60 * 1000) {
+    return { json: async () => paprikaCache.allCoins.data };
+  }
+
   while (paprikaCallTimestamps.length >= 9) {
     await sleep(300);
     paprikaCallTimestamps = trackCall(paprikaCallTimestamps);
   }
+
   try {
     paprikaCallTimestamps = trackCall(paprikaCallTimestamps);
     const res = await fetch(url);
     if (res.status === 429) {
       await sleep(3000);
-      return safePaprikaFetch(url);
+      return safePaprikaFetch(url, useCache);
     }
-    return res;
+
+    const json = await res.json();
+
+    if (isAllCoins && useCache) {
+      paprikaCache.allCoins = {
+        timestamp: Date.now(),
+        data: json
+      };
+    }
+
+    return { json: async () => json };
   } catch {
     return { json: async () => [] };
   }
@@ -58,34 +77,7 @@ async function fetchExchangeRate() {
     return 1.35;
   }
 }
-
-async function fetchCrypto(sym, curr) {
-  try {
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${sym.toUpperCase()}USDT`);
-    const data = await res.json();
-    const usdPrice = parseFloat(data.lastPrice);
-    const usdChange = parseFloat(data.priceChangePercent);
-    if (curr.toUpperCase() === 'CAD') {
-      const rate = await fetchExchangeRate();
-      return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
-    }
-    return { price: usdPrice, change: usdChange, currency: 'USD' };
-  } catch {
-    return null;
-  }
-}
-
-async function fetchAction(sym) {
-  try {
-    const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
-    const data = await res.json();
-    const change = data.pc && data.pc !== 0 ? ((data.c - data.pc) / data.pc) * 100 : 0;
-    return { price: data.c, change, currency: 'USD' };
-  } catch {
-    return null;
-  }
-}
-
+// === Bloc 2/2 ===
 function removeAsset() {
   const sym = document.getElementById('removeSymbol').value.trim().toLowerCase();
   portfolio = portfolio.filter(a => a.sym.toLowerCase() !== sym);
@@ -107,7 +99,6 @@ async function addAsset() {
 }
 
 async function fetchOpportunities() {
-  localStorage.removeItem('coinpaprika_cache');
   const ul = document.getElementById("opportunities");
   ul.innerHTML = '<li>Analyse IA en cours...</li>';
 
