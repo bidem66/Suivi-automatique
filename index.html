@@ -26,9 +26,7 @@
       grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); 
       gap: 10px; 
     }
-    .controls input, 
-    .controls select, 
-    .controls button { 
+    .controls input, .controls select, .controls button { 
       padding: 10px; 
       margin: 5px; 
       width: 100%; 
@@ -45,7 +43,7 @@
       text-align: center; 
     }
     th { background: #eee; }
-    .gain { color: green; }
+    .gain { color: green; } 
     .perte { color: red; }
     #globalPerf { 
       font-weight: bold; 
@@ -85,6 +83,7 @@
     <input id="removeSymbol" placeholder="Symbole à supprimer" />
     <button onclick="removeAsset()">Supprimer</button>
     <button onclick="refreshAll()">Actualiser maintenant</button>
+    <button id="refreshBtn">Rafraîchir opportunités IA</button>
   </div>
 
   <div id="globalPerf"></div>
