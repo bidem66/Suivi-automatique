@@ -102,7 +102,7 @@ debug(`Tickers list: ${tickers.map(t => t.symbol).join(', ')}`);
       }
       // 2. Marchés & liquidité
       debug(`Fetching markets for ${sym}`);
-      const markets = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`)
+      const markets = await fetch(`${PROXY}coinpaprika-markets?id=${t.id}`)
         .then(r => r.json()).catch(() => []);
       await sleep(100);
       debug(`Markets count for ${sym}: ${markets.length}`);
