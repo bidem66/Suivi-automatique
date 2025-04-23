@@ -179,22 +179,36 @@ async function fetchOpportunities() {
     let news, rsi, macdData, evt, onch;
     try {
       let res;
-      res  = await safeFetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`, 'News');
-      news = await safeJson(res, 'News');
+
+      // Paramètre from = 7 jours en arrière
+      const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+
+      // News la plus récente
+      res  = await safeFetch(
+        `${PROXY}news?` +
+        `q=${encodeURIComponent(t.name)}` +
+        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
+        `News ${sym}`
+      );
+      news = await safeJson(res, `News ${sym}`);
       await sleep(200);
 
+      // RSI
       res   = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
       rsi   = (await safeJson(res, 'RSI'))?.value;
       await sleep(200);
 
+      // MACD
       res       = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
       macdData  = await safeJson(res, 'MACD');
       await sleep(200);
 
+      // Events
       res  = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
       evt  = await safeJson(res, 'Events');
       await sleep(200);
 
+      // On-chain
       res   = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
       onch  = await safeJson(res, 'Onchain');
     } catch (err) {
@@ -217,15 +231,26 @@ async function fetchOpportunities() {
     const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
     const confidence = ((boosts.reduce((a,b)=>a+b,0)/4)*10).toFixed(1);
 
-    // score final = forecast 7j
     if (forecast >= 20) {
+      // Format de la date
+      const article = news?.articles?.[0];
+      let dateStr = '';
+      if (article?.publishedAt) {
+        dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+      }
       enriched.push({
         name: sym,
         forecast: forecast.toFixed(1),
         confidence,
-        reason: news?.articles?.[0]?.title || 'Pas d’actualité'
+        reason: news?.articles?.[0]?.title || 'Pas d’actualité',
+        newsDate: dateStr,
+        newsUrl: article?.url
       });
     }
+
     await sleep(SLEEP_LONG);
   }
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
@@ -240,7 +265,10 @@ async function fetchOpportunities() {
         <li>
           <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
-          <em>${e.reason}</em>
+          <em>${e.reason}</em><br/>
+          ${e.newsUrl
+            ? `<a href="${e.newsUrl}" target="_blank">📰 ${e.reason} <small>(${e.newsDate})</small></a>`
+            : '<em>Aucune actualité disponible</em>'}
         </li>`;
     });
 }
