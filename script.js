@@ -59,12 +59,13 @@ async function getCachedPaprikaData() {
   const key = 'coinpaprika_cache';
   const cache = JSON.parse(localStorage.getItem(key) || '{}');
   const now = Date.now();
-  // TTL réduit à 1 heure (au lieu de 6h)
   const maxAge = 1 * 60 * 60 * 1000; // 1h
   if (cache.timestamp && now - cache.timestamp < maxAge) {
+    debug('Using cached CoinPaprika data');
     return cache.data;
   }
   try {
+    debug('Fetching new CoinPaprika data');
     const res = await fetch(`${PROXY}coinpaprika`);
     const data = await res.json();
     localStorage.setItem(key, JSON.stringify({ timestamp: now, data }));
@@ -79,22 +80,43 @@ async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   if (!ul) return;
   ul.innerHTML = '<li>Détection des opportunités IA...</li>';
-  debug('Starting fetchOpportunities');
+  debug('--- Starting fetchOpportunities ---');
 
   try {
     // 1. Pré-filtre (1000 tickers)
     const tickers = (await getCachedPaprikaData()).slice(0, 1000);
+    debug(`Total tickers loaded: ${tickers.length}`);
+debug(`Tickers list: ${tickers.map(t => t.symbol).join(', ')}`);
     const candidates = [];
     for (const t of tickers) {
+      const sym = t.symbol.toUpperCase();
       const q = t.quotes?.USD || {};
-      if (q.market_cap < 5e6 || q.volume_24h < 1e6) continue;
+      debug(`Checking ${sym}: cap=${q.market_cap}, vol=${q.volume_24h}`);
+      if (q.market_cap < 5e6) {
+        debug(`Skip ${sym}: market cap < 5M`);
+        continue;
+      }
+      if (q.volume_24h < 1e6) {
+        debug(`Skip ${sym}: volume < 1M`);
+        continue;
+      }
       // 2. Marchés & liquidité
+      debug(`Fetching markets for ${sym}`);
       const markets = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`)
         .then(r => r.json()).catch(() => []);
       await sleep(100);
-      if (!markets.some(m => ['NDAX','Binance','Wealthsimple'].includes(m.exchange_name))) continue;
+      debug(`Markets count for ${sym}: ${markets.length}`);
+      const allowedEx = ['NDAX','Binance','Wealthsimple'];
+      const hasEx = markets.some(m => allowedEx.includes(m.exchange_name));
+      debug(`${sym} has allowed exchange? ${hasEx}`);
+      if (!hasEx) continue;
       const liq = markets.reduce((s, m) => s + (m.quote?.USD?.liquidity || 0), 0);
-      if (liq < 5e6) continue;
+      debug(`Liquidity for ${sym}: ${liq}`);
+      if (liq < 5e6) {
+        debug(`Skip ${sym}: liquidity < 5M`);
+        continue;
+      }
+      debug(`Candidate ${sym} added`);
       candidates.push(t);
       if (candidates.length >= 50) break;
     }
@@ -104,6 +126,7 @@ async function fetchOpportunities() {
     const enriched = [];
     for (let i = 0; i < candidates.length; i += 5) {
       const batch = candidates.slice(i, i + 5);
+      debug(`Enriching batch ${i/5 + 1} (${batch.map(x=>x.symbol).join(', ')})`);
       await Promise.all(batch.map(async t => {
         debug(`IA start ${t.symbol}`);
         try {
@@ -120,23 +143,20 @@ async function fetchOpportunities() {
           const signal = macdData.valueMACD - macdData.valueMACDSignal;
           const events = await evtR.json();
           const onch = await onchR.json();
-          const boosts = [
-            news.articles?.length ? 1.2 : 1,
-            (rsi < 30 && signal > 0) ? 1.2 : 1,
-            (events.body?.length > 0) ? 1.2 : 1,
-            (onch.data?.value || 0) > 500 ? 1.2 : 1
-          ];
+          // Boosts
+          const sBoost = news.articles?.length ? 1.2 : 1;
+          const iBoost = (rsi < 30 && signal > 0) ? 1.2 : 1;
+          const eBoost = (events.body?.length > 0) ? 1.2 : 1;
+          const oBoost = (onch.data?.value || 0) > 500 ? 1.2 : 1;
           const rawPct = t.quotes.USD.percent_change_24h;
-          const forecast = rawPct * boosts.reduce((a,b)=>a*b,1);
-          const confidence = ((boosts.reduce((a,b)=>a+b,0)/4)*5).toFixed(1);
-          if (forecast < 20) { debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`); return; }
-          enriched.push({
-            name: t.symbol,
-            forecast: `${forecast.toFixed(1)}%`,
-            confidence,
-            reason: news.articles?.[0]?.title || 'Pas d’actualité'
-          });
-          debug(`keep ${t.symbol}: ${forecast.toFixed(1)}%`);
+          const forecast = rawPct * sBoost * iBoost * eBoost * oBoost;
+          const confidence = ((sBoost + iBoost + eBoost + oBoost) / 4 * 5).toFixed(1);
+          if (forecast < 20) {
+            debug(`skip ${t.symbol}: forecast ${forecast.toFixed(1)}%`);
+            return;
+          }
+          enriched.push({ name: t.symbol, forecast: `${forecast.toFixed(1)}%`, confidence, reason: news.articles?.[0]?.title || 'Pas d’actualité' });
+          debug(`keep ${t.symbol}: forecast ${forecast.toFixed(1)}%`);
         } catch (e) {
           debug(`error ${t.symbol}: ${e.message}`);
         }
@@ -154,14 +174,7 @@ async function fetchOpportunities() {
     enriched
       .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
       .slice(0, 5)
-      .forEach(e => {
-        ul.innerHTML += `
-          <li>
-            <strong>${e.name}</strong> : ${e.forecast}<br/>
-            Confiance IA : ${e.confidence}/10<br/>
-            <em>${e.reason}</em>
-          </li>`;
-      });
+      .forEach(e => ul.innerHTML += `<li><strong>${e.name}</strong> : ${e.forecast}<br/>Confiance IA : ${e.confidence}/10<br/><em>${e.reason}</em></li>`);
   } catch (err) {
     debug('fetchOpportunities error: ' + err.message);
     ul.innerHTML = '<li>Erreur IA</li>';
@@ -176,9 +189,7 @@ async function refreshAll() {
   tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = '';
   let inv = 0, val = 0;
   for (const a of portfolio) {
-    const info = a.type === 'crypto'
-      ? await fetchCrypto(a.sym, a.curr)
-      : await fetchAction(a.sym);
+    const info = a.type === 'crypto' ? await fetchCrypto(a.sym, a.curr) : await fetchAction(a.sym);
     if (!info) {
       debug(`No info for ${a.sym}`);
       continue;
@@ -189,19 +200,8 @@ async function refreshAll() {
     const cls = gain >= 0 ? 'gain' : 'perte';
     const sign = gain >= 0 ? '+' : '';
     inv += a.inv; val += value;
-    tbodyA.innerHTML += `
-      <tr>
-        <td>${a.sym}</td>
-        <td>${a.qty}</td>
-        <td>${a.inv.toFixed(2)}</td>
-        <td>${info.price.toFixed(2)}</td>
-        <td>${value.toFixed(2)}</td>
-        <td class="${cls}">${sign}${change}%</td>
-        <td>${info.currency}</td>
-      </tr>`;
-    advice.innerHTML += `<li><strong>${a.sym}</strong> : ${
-      gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
-    }</li>`;
+    tbodyA.innerHTML += `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td><td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td><td class="${cls}">${sign}${change}%</td><td>${info.currency}</td></tr>`;
+    advice.innerHTML += `<li><strong>${a.sym}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
   }
   const totalGain = val - inv;
   const totalPct = inv ? ((totalGain / inv * 100).toFixed(2)) : 0;
