@@ -41,15 +41,16 @@ async function safeJson(res, label) {
 
 // === 3. FETCH ACTIONS & CRYPTOS ===
 async function fetchExchangeRate() {
-  const url = "https://api.exchangerate.host/latest?base=USD&symbols=CAD";
-  const res = await safeFetch(url, 'ExchangeRate');
-  const j   = await safeJson(res, 'ExchangeRate');
+  const res = await safeFetch(
+    "https://api.exchangerate.host/latest?base=USD&symbols=CAD",
+    'ExchangeRate'
+  );
+  const j = await safeJson(res, 'ExchangeRate');
   return j?.rates?.CAD || 1.35;
 }
 
 async function fetchAction(sym) {
-  const url = `${PROXY}finnhub?symbol=${sym.toUpperCase()}`;
-  const res = await safeFetch(url, 'Finnhub');
+  const res = await safeFetch(`${PROXY}finnhub?symbol=${sym}`, 'Finnhub');
   const d   = await safeJson(res, 'Finnhub');
   if (!d) return null;
   const change = d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0;
@@ -57,8 +58,7 @@ async function fetchAction(sym) {
 }
 
 async function fetchCrypto(sym, curr) {
-  const url = `${PROXY}binance?symbol=${sym.toUpperCase()}USDT`;
-  const res = await safeFetch(url, 'Binance');
+  const res = await safeFetch(`${PROXY}binance?symbol=${sym}USDT`, 'Binance');
   const d   = await safeJson(res, 'Binance');
   if (!d) return null;
   const price  = parseFloat(d.lastPrice);
@@ -74,12 +74,13 @@ async function fetchCrypto(sym, curr) {
 async function fetchGeckoTickers(perPage = 100, pages = 5) {
   const all = [];
   for (let p = 1; p <= pages; p++) {
-    const url =
+    const res = await safeFetch(
       `${PROXY}coingecko?endpoint=coins/markets` +
       `&vs_currency=usd&order=market_cap_desc` +
       `&per_page=${perPage}&page=${p}` +
-      `&sparkline=false&price_change_percentage=24h`;
-    const res = await safeFetch(url, `Gecko page ${p}`);
+      `&sparkline=false&price_change_percentage=24h`,
+      `Gecko page ${p}`
+    );
     const arr = await safeJson(res, `Gecko page ${p}`);
     if (!Array.isArray(arr)) break;
     all.push(...arr);
@@ -129,18 +130,16 @@ async function getTickerList() {
   return results;
 }
 
-// === 5. ENRICHISSEMENT IA (50 tickers max) ===
+// === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 5 affichés) ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
   debug('--- Début fetchOpportunities ---');
 
-  // **AJOUTÉ** : log du total brut
+  // 5.1 – récupérer et filtrer
   const all     = await getTickerList();
-  debug(`🔄 Total combiné pour préfiltrage : ${all.length}`);
-
-  // 5.1 – filtres
-  const tickers = all.filter(t => {
+  debug(`🔄 Total brut pour préfiltrage : ${all.length}`);
+  const filtered = all.filter(t => {
     const u    = t.quotes.USD;
     const born = t.started_at ? new Date(t.started_at).getTime() : 0;
     const oneY = Date.now() - 365*24*60*60*1000;
@@ -152,28 +151,40 @@ async function fetchOpportunities() {
            !t.id.includes('testnet') &&
            !ban.some(w => t.name.toLowerCase().includes(w));
   });
+  debug(`🔍 Après filtres : ${filtered.length}`);
 
-  // **AJOUTÉ** : log du nombre après filtres
-  debug(`🔍 Cryptos retenues après filtres : ${tickers.length}`);
+  // 5.1.1 – scorer et garder les 100 meilleures
+  const maxMC  = Math.max(...filtered.map(t => t.quotes.USD.market_cap));
+  const maxVol = Math.max(...filtered.map(t => t.quotes.USD.volume_24h));
+  const scored = filtered
+    .map(t => ({
+      ...t,
+      preScore: (
+        (t.quotes.USD.market_cap / maxMC) * 0.7 +
+        (t.quotes.USD.volume_24h / maxVol) * 0.3
+      )
+    }))
+    .sort((a,b) => b.preScore - a.preScore);
+  const candidates = scored.slice(0, 100);
+  debug(`🎯 100 meilleurs pré-sélectionnés (score ≥ ${candidates[candidates.length-1]?.preScore.toFixed(3)})`);
 
-  // 5.2 – enrichissement séquentiel des 50 premiers
+  // 5.2 – enrichir ces 100, jusqu’à 50 retenus
   const enriched = [];
-  for (let i = 0; i < tickers.length && enriched.length < 50; i++) {
-    const t   = tickers[i];
+  for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
+    const t   = candidates[i];
     const sym = t.symbol;
+    debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
 
-    // on espace chaque appel pour éviter le throttling
+    // fetch séquentiel avec pauses
     let news, rsi, macdData, evt, onch;
     try {
       let res;
-
       res  = await safeFetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`, 'News');
       news = await safeJson(res, 'News');
       await sleep(200);
 
-      res  = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
-      const rsiObj = await safeJson(res, 'RSI');
-      rsi  = rsiObj?.value;
+      res   = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
+      rsi   = (await safeJson(res, 'RSI'))?.value;
       await sleep(200);
 
       res       = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
@@ -187,24 +198,26 @@ async function fetchOpportunities() {
       res   = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
       onch  = await safeJson(res, 'Onchain');
     } catch (err) {
-      debug(`❌ fetch IA loop ${sym}: ${err.message}`);
+      debug(`❌ Erreur IA fetch pour ${sym}: ${err.message}`);
       continue;
     }
 
     // calcul des boosts
-    const sig    = macdData?.valueMACDSignal ?? 0;
-    const val    = macdData?.valueMACD       ?? 0;
+    const sig    = macdData?.valueMACDSignal || 0;
+    const val    = macdData?.valueMACD       || 0;
     const boosts = [
-      news?.articles?.length            ? 1.2 : 1,
-      (rsi < 30 && val > sig)           ? 1.2 : 1,
-      (evt?.body?.length > 0)           ? 1.2 : 1,
-      ((onch?.data?.value||0) > 500)    ? 1.2 : 1
+      news?.articles?.length         ? 1.2 : 1,
+      (rsi < 30 && val > sig)        ? 1.2 : 1,
+      (evt?.body?.length > 0)        ? 1.2 : 1,
+      ((onch?.data?.value||0) > 500) ? 1.2 : 1
     ];
 
-    const raw      = t.quotes.USD.percent_change_24h || 0;
-    const forecast = raw * boosts.reduce((a,b)=>a*b,1);
+    // forecast 7 jours
+    const rawPct   = t.quotes.USD.percent_change_24h || 0;
+    const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
     const confidence = ((boosts.reduce((a,b)=>a+b,0)/4)*10).toFixed(1);
 
+    // score final = forecast 7j
     if (forecast >= 20) {
       enriched.push({
         name: sym,
@@ -213,20 +226,19 @@ async function fetchOpportunities() {
         reason: news?.articles?.[0]?.title || 'Pas d’actualité'
       });
     }
-
     await sleep(SLEEP_LONG);
   }
+  debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
-  // 5.3 – affichage du top 5
+  // 5.3 – trier sur forecast 7j et afficher top 5
   ul.innerHTML = '';
-  debug(`✅ Total enrichies: ${enriched.length}`);
   enriched
-    .sort((a,b)=>parseFloat(b.forecast)-parseFloat(a.forecast))
+    .sort((a,b)=> parseFloat(b.forecast) - parseFloat(a.forecast))
     .slice(0,5)
     .forEach(e => {
       ul.innerHTML += `
         <li>
-          <strong>${e.name}</strong>: ${e.forecast}%<br/>
+          <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
           <em>${e.reason}</em>
         </li>`;
@@ -258,8 +270,8 @@ async function refreshAll() {
       <tr>
         <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
         <td>${info.price.toFixed(2)}</td><td>${v.toFixed(2)}</td>
-        <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>`
-    ;
+        <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>
+      </tr>`;
     adv.innerHTML += `<li><strong>${a.sym}</strong>: ${
       gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
     }</li>`;
