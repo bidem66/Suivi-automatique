@@ -2,7 +2,6 @@
 
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
-const STABLES = ["BTC","ETH","USDT","USDC","DAI","TUSD","BNB","XRP","BCH","LTC"];
 
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
@@ -29,11 +28,11 @@ async function fetchAction(sym) {
 
 async function fetchExchangeRate() {
   try {
-    const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
+    const res = await fetch(`${PROXY}exchangerate?base=USD&symbols=CAD`);
     const data = await res.json();
     return data.rates?.CAD || 1.35;
-  } catch {
-    debug('fetchExchangeRate failed, using 1.35');
+  } catch (err) {
+    debug('fetchExchangeRate error: ' + err.message);
     return 1.35;
   }
 }
@@ -41,7 +40,7 @@ async function fetchExchangeRate() {
 async function fetchCrypto(sym, curr) {
   try {
     const symbolPair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${symbolPair}`);
+    const res = await fetch(`${PROXY}binance?symbol=${symbolPair}`);
     const data = await res.json();
     const usdPrice = parseFloat(data.lastPrice);
     const usdChange = parseFloat(data.priceChangePercent);
@@ -94,69 +93,90 @@ async function getCachedPaprikaData() {
 }
 
 async function fetchOpportunities() {
-  const ul = document.getElementById("opportunities");
-  ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel sur 30 jours...</li>';
+  const ul = document.getElementById('opportunities');
+  ul.innerHTML = '<li>Analyse IA des cryptos à fort potentiel...</li>';
   try {
+    // 1. Pré-filtre (1000 tickers)
     const all = (await getCachedPaprikaData()).slice(0, 1000);
     const candidates = [];
     for (const t of all) {
       const sym = t.symbol.toUpperCase();
-      if (STABLES.includes(sym)) continue;
-      const change = t.quotes?.USD?.percent_change_24h || 0;
-      const vol = t.quotes?.USD?.volume_24h || 0;
-      if (change > 10 && vol > 100000 && t.rank <= 1000) candidates.push(t);
+      const quotes = t.quotes?.USD || {};
+      const mc = quotes.market_cap || 0;
+      const vol = quotes.volume_24h || 0;
+      const pct = quotes.percent_change_24h || 0;
+      if (mc < 50e6 || vol < 20e6 || pct < 10) continue;
+      // 2. Vérifier marchés et liquidité
+      const markets = await fetch(`${PROXY}coinpaprika-markets?id=${t.id}`)
+        .then(r => r.json()).catch(() => []);
+      await sleep(100);
+      const allowedEx = ['NDAX','Binance','Wealthsimple'];
+      if (!markets.some(m => allowedEx.includes(m.exchange_name))) continue;
+      const liq = markets.reduce((s, m) => s + (m.quote?.USD?.liquidity || 0), 0);
+      if (liq < 5e6) continue;
+      candidates.push(t);
+      if (candidates.length >= 50) break;
     }
+    
+    // 3. Enrichissement IA en batchs de 5
     const enriched = [];
-    for (let t of candidates) {
-      const sym = t.symbol.toUpperCase();
-      debug(`IA analyse start for ${sym}`);
-      try {
-        const [newsRes, rsiRes, macdRes, eventRes, onchainRes] = await Promise.all([
-          fetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`),
-          fetch(`${PROXY}rsi?symbol=${sym}`),
-          fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`${PROXY}events?coins=${sym}`),
-          fetch(`${PROXY}onchain?symbol=${sym}`)
-        ]);
-        const news = await newsRes.json();
-        const rsi = (await rsiRes.json()).value;
-        const macdData = await macdRes.json();
-        const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
-        const events = await eventRes.json();
-        const onchain = await onchainRes.json();
-        const hasEvent = events?.body?.length > 0;
-        const activeAddr = onchain?.data?.value || 0;
-        const boosts = [
-          news.articles?.length ? 1.2 : 1,
-          rsi < 30 && macdSignal > 0 ? 1.2 : 1,
-          hasEvent ? 1.2 : 1,
-          activeAddr > 1000 ? 1.2 : 1
-        ];
-        const forecast = t.quotes.USD.percent_change_24h * boosts.reduce((a,b)=>a*b,1);
-        if (forecast < 15) { 
-          debug(`IA skip ${sym} forecast ${forecast.toFixed(1)}`); 
-          continue; 
+    for (let i = 0; i < candidates.length; i += 5) {
+      const batch = candidates.slice(i, i + 5);
+      await Promise.all(batch.map(async t => {
+        debug(`IA start ${t.symbol}`);
+        try {
+          const [newsRes, rsiRes, macdRes, eventRes, onchainRes] = await Promise.all([
+            fetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`),
+            fetch(`${PROXY}rsi?symbol=${t.symbol}`),
+            fetch(`${PROXY}macd?symbol=${t.symbol}`),
+            fetch(`${PROXY}events?coins=${t.symbol}`),
+            fetch(`${PROXY}onchain?symbol=${t.symbol}`)
+          ]);
+          const news = await newsRes.json();
+          const rsi = (await rsiRes.json()).value;
+          const macdData = await macdRes.json();
+          const macdSignal = macdData.valueMACD - macdData.valueMACDSignal;
+          const events = await eventRes.json();
+          const onchain = await onchainRes.json();
+          const sBoost = news.articles?.length ? 1.2 : 1;
+          const iBoost = (rsi < 30 && macdSignal > 0) ? 1.2 : 1;
+          const eBoost = events?.body?.length > 0 ? 1.2 : 1;
+          const oBoost = (onchain.data?.value || 0) > 500 ? 1.2 : 1;
+          const rawPct = t.quotes.USD.percent_change_24h;
+          const forecast = rawPct * sBoost * iBoost * eBoost * oBoost;
+          const confidence = ((sBoost + iBoost + eBoost + oBoost)/4 * 5).toFixed(1);
+          if (forecast < 20) { debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`); return; }
+          enriched.push({
+            name: t.symbol,
+            forecast: `${forecast.toFixed(1)}% en 30 jours`,
+            confidence,
+            reason: news.articles?.[0]?.title || 'Pas d’actualité'
+          });
+          debug(`keep ${t.symbol}: ${forecast.toFixed(1)}%`);
+        } catch (err) {
+          debug(`error ${t.symbol}: ${err.message}`);
         }
-        enriched.push({ name: sym, forecast: `+${forecast.toFixed(1)}%`, horizon: '30j', reason: news.articles?.[0]?.title || '' });
-        debug(`IA keep ${sym} forecast ${forecast.toFixed(1)}`);
-      } catch (e) {
-        debug(`IA error for ${sym}: ${e.message}`);
-      }
+      }));
+      await sleep(500);
     }
+
+    // 4. Affichage Top 5
     ul.innerHTML = '';
-    if (!enriched.length) ul.innerHTML = '<li>Aucune crypto explosive détectée.</li>';
-    enriched
-      .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
-      .slice(0,5)
+    enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+      .slice(0, 5)
       .forEach(e => {
-        ul.innerHTML += `<li><strong>${e.name}</strong> ${e.forecast} (${e.horizon})<br/><em>${e.reason}</em></li>`;
+        ul.innerHTML += `
+          <li>
+            <strong>${e.name}</strong> : ${e.forecast}<br/>
+            Confiance IA : ${e.confidence}/10<br/>
+            <em>${e.reason}</em>
+          </li>`;
       });
-  } catch (e) {
-    debug('fetchOpportunities error: ' + e.message);
-    document.getElementById('opportunities').innerHTML = '<li>Erreur IA globale</li>';
+  } catch (err) {
+    debug('fetchOpportunities error: ' + err.message);
+    document.getElementById('opportunities').innerHTML = '<li>Erreur IA</li>';
   }
 }
-
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
   const tbodyC = document.getElementById("tableCrypto");
