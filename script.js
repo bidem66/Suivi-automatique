@@ -86,7 +86,8 @@ async function fetchOpportunities() {
     const candidates = [];
     for (const t of tickers) {
       const q = t.quotes?.USD || {};
-      if (q.market_cap < 50e6 || q.volume_24h < 20e6 || q.percent_change_24h < 10) continue;
+      // Filtre ajusté : suppression du % journalier, seuils abaissés
+      if (q.market_cap < 5e6 || q.volume_24h < 1e6) continue;
       // 2. Marchés & liquidité
       const markets = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`)
         .then(r => r.json()).catch(() => []);
@@ -126,7 +127,7 @@ async function fetchOpportunities() {
           const oBoost = (onch.data?.value || 0) > 500 ? 1.2 : 1;
           const rawPct = t.quotes.USD.percent_change_24h;
           const forecast = rawPct * sBoost * iBoost * eBoost * oBoost;
-          const confidence = ((sBoost + iBoost + eBoost + oBoost) / 4 * 5).toFixed(1);
+          const confidence = (((sBoost + iBoost + eBoost + oBoost) / 4) * 5).toFixed(1);
           if (forecast < 20) {
             debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`);
             return;
@@ -163,7 +164,6 @@ async function fetchOpportunities() {
             <em>${e.reason}</em>
           </li>`;
       });
-
   } catch (err) {
     debug('fetchOpportunities error: ' + err.message);
     ul.innerHTML = '<li>Erreur IA</li>';
