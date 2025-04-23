@@ -59,7 +59,8 @@ async function getCachedPaprikaData() {
   const key = 'coinpaprika_cache';
   const cache = JSON.parse(localStorage.getItem(key) || '{}');
   const now = Date.now();
-  const maxAge = 6 * 60 * 60 * 1000; // 6h
+  // TTL réduit à 1 heure (au lieu de 6h)
+  const maxAge = 1 * 60 * 60 * 1000; // 1h
   if (cache.timestamp && now - cache.timestamp < maxAge) {
     return cache.data;
   }
@@ -86,7 +87,6 @@ async function fetchOpportunities() {
     const candidates = [];
     for (const t of tickers) {
       const q = t.quotes?.USD || {};
-      // Filtre ajusté : suppression du % journalier, seuils abaissés
       if (q.market_cap < 5e6 || q.volume_24h < 1e6) continue;
       // 2. Marchés & liquidité
       const markets = await fetch(`https://api.coinpaprika.com/v1/coins/${t.id}/markets`)
@@ -120,18 +120,16 @@ async function fetchOpportunities() {
           const signal = macdData.valueMACD - macdData.valueMACDSignal;
           const events = await evtR.json();
           const onch = await onchR.json();
-          // Boosts
-          const sBoost = news.articles?.length ? 1.2 : 1;
-          const iBoost = (rsi < 30 && signal > 0) ? 1.2 : 1;
-          const eBoost = (events.body?.length > 0) ? 1.2 : 1;
-          const oBoost = (onch.data?.value || 0) > 500 ? 1.2 : 1;
+          const boosts = [
+            news.articles?.length ? 1.2 : 1,
+            (rsi < 30 && signal > 0) ? 1.2 : 1,
+            (events.body?.length > 0) ? 1.2 : 1,
+            (onch.data?.value || 0) > 500 ? 1.2 : 1
+          ];
           const rawPct = t.quotes.USD.percent_change_24h;
-          const forecast = rawPct * sBoost * iBoost * eBoost * oBoost;
-          const confidence = (((sBoost + iBoost + eBoost + oBoost) / 4) * 5).toFixed(1);
-          if (forecast < 20) {
-            debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`);
-            return;
-          }
+          const forecast = rawPct * boosts.reduce((a,b)=>a*b,1);
+          const confidence = ((boosts.reduce((a,b)=>a+b,0)/4)*5).toFixed(1);
+          if (forecast < 20) { debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`); return; }
           enriched.push({
             name: t.symbol,
             forecast: `${forecast.toFixed(1)}%`,
