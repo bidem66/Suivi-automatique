@@ -78,6 +78,8 @@ async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   if (!ul) return;
   ul.innerHTML = '<li>Détection des opportunités IA...</li>';
+  debug('Starting fetchOpportunities');
+
   try {
     // 1. Pré-filtre (1000 tickers)
     const tickers = (await getCachedPaprikaData()).slice(0, 1000);
@@ -95,6 +97,7 @@ async function fetchOpportunities() {
       candidates.push(t);
       if (candidates.length >= 50) break;
     }
+    debug(`Candidates after pre-filter: ${candidates.length}`);
 
     // 3. Enrichissement IA par batchs de 5
     const enriched = [];
@@ -124,7 +127,10 @@ async function fetchOpportunities() {
           const rawPct = t.quotes.USD.percent_change_24h;
           const forecast = rawPct * sBoost * iBoost * eBoost * oBoost;
           const confidence = ((sBoost + iBoost + eBoost + oBoost) / 4 * 5).toFixed(1);
-          if (forecast < 20) { debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`); return; }
+          if (forecast < 20) {
+            debug(`skip ${t.symbol}: ${forecast.toFixed(1)}%`);
+            return;
+          }
           enriched.push({
             name: t.symbol,
             forecast: `${forecast.toFixed(1)}%`,
@@ -138,9 +144,14 @@ async function fetchOpportunities() {
       }));
       await sleep(500);
     }
+    debug(`Enriched count: ${enriched.length}`);
 
     // 4. Affichage Top 5
     ul.innerHTML = '';
+    if (enriched.length === 0) {
+      ul.innerHTML = '<li>Aucune opportunité détectée.</li>';
+      return;
+    }
     enriched
       .sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
       .slice(0, 5)
@@ -152,6 +163,7 @@ async function fetchOpportunities() {
             <em>${e.reason}</em>
           </li>`;
       });
+
   } catch (err) {
     debug('fetchOpportunities error: ' + err.message);
     ul.innerHTML = '<li>Erreur IA</li>';
@@ -189,7 +201,9 @@ async function refreshAll() {
         <td class="${cls}">${sign}${change}%</td>
         <td>${info.currency}</td>
       </tr>`;
-    advice.innerHTML += `<li><strong>${a.sym}</strong> : ${gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'}</li>`;
+    advice.innerHTML += `<li><strong>${a.sym}</strong> : ${
+      gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
+    }</li>`;
   }
   const totalGain = val - inv;
   const totalPct = inv ? ((totalGain / inv * 100).toFixed(2)) : 0;
