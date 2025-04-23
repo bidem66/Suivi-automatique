@@ -38,12 +38,14 @@ async function fetchMarkets(id, symbol) {
   if (cached.timestamp && now - cached.timestamp < 3600000) return cached.data;
 
   const api = getNextMarketApi();
-  await sleep(300); // pour éviter la surcharge
+  await sleep(300); // limiter surcharge API
+
   try {
     if (api === 'paprika') {
       const res = await fetch(`${PROXY}coinpaprika-markets?id=${id}`);
       if (!res.ok) throw new Error('Paprika failed');
       const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('data.map is not a function');
       const exchanges = data.map(m => m.exchange_name);
       const liquidity = data.reduce((s, m) => s + (m.quote?.USD?.liquidity || 0), 0);
       const isValid = exchanges.some(e => ['NDAX', 'Binance', 'Wealthsimple'].includes(e)) && liquidity >= 5e6;
@@ -54,6 +56,7 @@ async function fetchMarkets(id, symbol) {
       const res = await fetch(`https://api.coingecko.com/api/v3/coins/${symbol.toLowerCase()}/tickers`);
       if (!res.ok) throw new Error('Gecko failed');
       const data = await res.json();
+      if (!Array.isArray(data.tickers)) throw new Error('data.tickers is not a function');
       const exchanges = data.tickers.map(t => t.market.name);
       const isValid = exchanges.some(e => ['NDAX', 'Binance', 'Wealthsimple'].includes(e));
       const result = { isValid, liquidity: 0, exchanges };
@@ -110,7 +113,6 @@ async function getTickerList() {
   debug(`🔄 Total combiné pour préfiltrage : ${results.length}`);
   return results;
 }
-
 // === 4. ENRICHISSEMENT IA ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
@@ -123,7 +125,7 @@ async function fetchOpportunities() {
       const usd = t.quotes?.USD || {};
       const started = t.started_at ? new Date(t.started_at).getTime() : 0;
       const oneYearAgo = Date.now() - 365 * 24 * 60 * 60 * 1000;
-      const banned = ['elon', 'baby', 'moon', 'cum', 'trump', 'fart', 'hawk', 'libra', 'peanut', 'shiba', 'inu', 'pepe', 'doge', 'bonk'];
+      const banned = ['elon', 'cum', 'baby', 'moon', 'trump'];
       return usd.market_cap >= 5e6 && usd.volume_24h >= 1e6 &&
              !banned.some(w => t.name.toLowerCase().includes(w)) &&
              !t.id.includes('testnet') && t.rank < 500 && started < oneYearAgo;
@@ -134,12 +136,13 @@ async function fetchOpportunities() {
     while (i < tickers.length && enriched.length < 50) {
       const t = tickers[i++];
       const sym = t.symbol;
-      const marketInfo = await fetchMarkets(t.id, sym);
-      if (!marketInfo.isValid) {
-        debug(`⏭ ${sym} exclu – marché non valide`);
-        continue;
-      }
       try {
+        const marketInfo = await fetchMarkets(t.id, sym);
+        if (!marketInfo.isValid) {
+          debug(`⏭ ${sym} exclu – marché non valide`);
+          continue;
+        }
+
         const [newsR, rsiR, macdR, evtR, onchR, socR] = await Promise.all([
           fetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`),
           fetch(`${PROXY}rsi?symbol=${sym}`),
@@ -148,6 +151,7 @@ async function fetchOpportunities() {
           fetch(`${PROXY}onchain?symbol=${sym}`),
           fetch(`${PROXY}community?symbol=${sym}`)
         ]);
+
         const news = await newsR.json();
         const rsi = (await rsiR.json()).value;
         const macd = await macdR.json();
@@ -166,6 +170,7 @@ async function fetchOpportunities() {
         const raw = t.quotes?.USD?.percent_change_24h || 0;
         const forecast = raw * boosts.reduce((a,b)=>a*b,1);
         const confidence = ((boosts.reduce((a,b)=>a+b,0)/5)*5).toFixed(1);
+
         if (forecast < 20) continue;
         enriched.push({
           name: sym,
@@ -173,9 +178,11 @@ async function fetchOpportunities() {
           confidence,
           reason: news.articles?.[0]?.title || 'Pas d’actualité'
         });
+
       } catch (err) {
         debug(`Erreur enrichissement ${sym}: ${err.message}`);
       }
+
       await sleep(500);
     }
 
@@ -183,12 +190,16 @@ async function fetchOpportunities() {
     debug(`✅ Total enrichies : ${enriched.length}`);
     enriched.sort((a, b) => parseFloat(b.forecast) - parseFloat(a.forecast))
       .slice(0, 5)
-      .forEach(e => ul.innerHTML += `<li><strong>${e.name}</strong>: ${e.forecast}%<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em></li>`);
+      .forEach(e => {
+        ul.innerHTML += `<li><strong>${e.name}</strong>: ${e.forecast}%<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em></li>`;
+      });
+
   } catch (err) {
     debug('fetchOpportunities error: ' + err.message);
     ul.innerHTML = '<li>Erreur IA</li>';
   }
 }
+
 // === 5. FONCTIONS PRINCIPALES ===
 async function refreshAll() {
   const tbodyA = document.getElementById("tableAction");
