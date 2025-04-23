@@ -1,3 +1,5 @@
+// script.js
+
 // === 1. CONST & VARIABLES GLOBALES ===
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -6,7 +8,9 @@ const SLEEP_SHORT = 300;
 const SLEEP_LONG  = 500;
 
 // === 2. OUTILS ===
-function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
+function sleep(ms) {
+  return new Promise(res => setTimeout(res, ms));
+}
 function debug(msg) {
   const el = document.getElementById('debugConsole');
   if (el) el.innerHTML += `${new Date().toLocaleTimeString()} – ${msg}<br>`;
@@ -16,7 +20,8 @@ function debug(msg) {
 async function fetchExchangeRate() {
   try {
     const r = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
-    return (await r.json()).rates?.CAD || 1.35;
+    const d = await r.json();
+    return d.rates?.CAD || 1.35;
   } catch {
     debug('fetchExchangeRate failed, using 1.35');
     return 1.35;
@@ -52,18 +57,31 @@ async function fetchCrypto(sym, curr) {
     return null;
   }
 }
+
 // === 4. PRÉ-SÉLECTION DYNAMIQUE (500 tickers) ===
-async function fetchGeckoTickers(perPage = 100, pages = 1) {
+
+// 4.1. Récupération verbose des pages Gecko
+async function fetchGeckoTickers(perPage = 100, pages = 5) {
   const all = [];
   for (let p = 1; p <= pages; p++) {
-    const r = await fetch(
+    const url =
       `${PROXY}coingecko?endpoint=coins/markets` +
       `&vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${p}` +
-      `&sparkline=false&price_change_percentage=24h`
-    );
-    const arr = await r.json();
-    if (!Array.isArray(arr)) break;
-    all.push(...arr);
+      `&sparkline=false&price_change_percentage=24h`;
+    try {
+      const r = await fetch(url);
+      debug(`🌐 Gecko page ${p} HTTP status: ${r.status}`);
+      const arr = await r.json();
+      if (!Array.isArray(arr)) {
+        debug(`⚠️ Gecko page ${p} returned non-array`);
+        break;
+      }
+      debug(`✅ Gecko page ${p} returned ${arr.length} tickers`);
+      all.push(...arr);
+    } catch (e) {
+      debug(`❌ Gecko page ${p} fetch error: ${e.message}`);
+      break;
+    }
     await sleep(SLEEP_SHORT);
   }
   return all;
@@ -72,29 +90,31 @@ async function fetchGeckoTickers(perPage = 100, pages = 1) {
 async function getTickerList() {
   const results = [];
 
-  // 4.1 – Essaye CoinPaprika
+  // 4.2 – Essaye CoinPaprika
   let cp = [];
   try {
     const r1 = await fetch(`${PROXY}coinpaprika`);
     const d1 = await r1.json();
-    if (Array.isArray(d1)) cp = d1.slice(0, 500);
-    else debug('⚠️ CoinPaprika returned non-array, skipping');
+    if (Array.isArray(d1)) {
+      cp = d1.slice(0, 500);
+      debug(`✅ CoinPaprika : ${cp.length} tickers`);
+    } else {
+      debug('⚠️ CoinPaprika returned non-array, skipping');
+    }
   } catch (e) {
     debug('⚠️ CoinPaprika failed: ' + e.message);
   }
   if (cp.length) {
     results.push(...cp);
-    debug(`✅ CoinPaprika : ${cp.length} tickers`);
   }
 
-  // 4.2 – Si CoinPaprika a fourni <500, complète avec Gecko
+  // 4.3 – Complète avec Gecko si nécessaire
   const need = 500 - results.length;
   if (need > 0) {
     const perPage = 100;
-    const pages   = Math.ceil(need / perPage);
-    let geo = [];
+    const pages = Math.ceil(need / perPage);
     try {
-      geo = await fetchGeckoTickers(perPage, pages);
+      let geo = await fetchGeckoTickers(perPage, pages);
       geo = geo.slice(0, need);
       const fmt = geo.map(d => ({
         id: d.id,
@@ -125,114 +145,120 @@ async function fetchOpportunities() {
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
   debug('--- Début fetchOpportunities ---');
 
-  const all = await getTickerList();
-  const tickers = all.filter(t => {
-    const u = t.quotes.USD;
-    const age = t.started_at ? new Date(t.started_at).getTime() : 0;
-    const oneY = Date.now() - 365*24*60*60*1000;
-    const ban  = ['elon','cum','baby','moon','trump'];
-    return u.market_cap   >= 5e6 &&
-           u.volume_24h   >= 1e6 &&
-           age             < oneY &&
-           t.rank          < 500 &&
-           !t.id.includes('testnet') &&
-           !ban.some(w => t.name.toLowerCase().includes(w));
-  });
+  try {
+    const all = await getTickerList();
+    const tickers = all.filter(t => {
+      const u = t.quotes.USD;
+      const age = t.started_at ? new Date(t.started_at).getTime() : 0;
+      const oneY = Date.now() - 365*24*60*60*1000;
+      const ban  = ['elon','cum','baby','moon','trump'];
+      return u.market_cap >= 5e6 &&
+             u.volume_24h >= 1e6 &&
+             age < oneY &&
+             t.rank < 500 &&
+             !t.id.includes('testnet') &&
+             !ban.some(w => t.name.toLowerCase().includes(w));
+    });
 
-  const enriched = [];
-  for (let i = 0; i < tickers.length && enriched.length < 50; i++) {
-    const t = tickers[i], sym = t.symbol;
-    try {
-      const [newsR, rsiR, macdR, evtR, onchR, socR] = await Promise.all([
-        fetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`),
-        fetch(`${PROXY}rsi?symbol=${sym}`),
-        fetch(`${PROXY}macd?symbol=${sym}`),
-        fetch(`${PROXY}events?coins=${sym}`),
-        fetch(`${PROXY}onchain?symbol=${sym}`),
-        fetch(`${PROXY}community?symbol=${sym}`)
-      ]);
+    const enriched = [];
+    for (let i = 0; i < tickers.length && enriched.length < 50; i++) {
+      const t = tickers[i];
+      const sym = t.symbol;
+      try {
+        const [newsR, rsiR, macdR, evtR, onchR, socR] = await Promise.all([
+          fetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`),
+          fetch(`${PROXY}rsi?symbol=${sym}`),
+          fetch(`${PROXY}macd?symbol=${sym}`),
+          fetch(`${PROXY}events?coins=${sym}`),
+          fetch(`${PROXY}onchain?symbol=${sym}`),
+          fetch(`${PROXY}community?symbol=${sym}`)
+        ]);
 
-      const news       = await newsR.json();
-      const rsi        = (await rsiR.json()).value;
-      const macdData   = await macdR.json();
-      const evt        = await evtR.json();
-      const onch       = await onchR.json();
-      const soc        = await socR.json();
-      const macdSignal = macdData.valueMACDSignal;
-      const macdVal    = macdData.valueMACD;
+        const news       = await newsR.json();
+        const rsi        = (await rsiR.json()).value;
+        const macdData   = await macdR.json();
+        const evt        = await evtR.json();
+        const onch       = await onchR.json();
+        const soc        = await socR.json();
+        const macdSignal = macdData.valueMACDSignal;
+        const macdVal    = macdData.valueMACD;
 
-      const boosts = [
-        news.articles?.length                            ? 1.2 : 1,
-        (rsi < 30 && macdVal > macdSignal)               ? 1.2 : 1,
-        (evt.body?.length > 0)                           ? 1.2 : 1,
-        ((onch.data?.value || 0) > 500)                  ? 1.2 : 1,
-        (soc.score > 70)                                 ? 1.2 : 1
-      ];
+        const boosts = [
+          news.articles?.length                            ? 1.2 : 1,
+          (rsi < 30 && macdVal > macdSignal)               ? 1.2 : 1,
+          (evt.body?.length > 0)                           ? 1.2 : 1,
+          ((onch.data?.value || 0) > 500)                  ? 1.2 : 1,
+          (soc.score > 70)                                 ? 1.2 : 1
+        ];
 
-      const raw      = t.quotes.USD.percent_change_24h || 0;
-      const forecast = raw * boosts.reduce((a,b) => a*b, 1);
-      const confidence = ((boosts.reduce((a,b) => a+b, 0)/5)*5).toFixed(1);
-      if (forecast < 20) continue;
+        const raw        = t.quotes.USD.percent_change_24h || 0;
+        const forecast   = raw * boosts.reduce((a,b)=>a*b,1);
+        const confidence = ((boosts.reduce((a,b)=>a+b,0)/5)*5).toFixed(1);
 
-      enriched.push({
-        name: sym,
-        forecast: forecast.toFixed(1),
-        confidence,
-        reason: news.articles?.[0]?.title || 'Pas d’actualité'
+        if (forecast < 20) continue;
+        enriched.push({
+          name: sym,
+          forecast: forecast.toFixed(1),
+          confidence,
+          reason: news.articles?.[0]?.title || 'Pas d’actualité'
+        });
+      } catch (err) {
+        debug(`❌ enrichissement ${sym}: ${err.message}`);
+      }
+      await sleep(SLEEP_LONG);
+    }
+
+    ul.innerHTML = '';
+    debug(`✅ Total enrichies : ${enriched.length}`);
+    enriched
+      .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+      .slice(0,5)
+      .forEach(e => {
+        ul.innerHTML +=
+          `<li><strong>${e.name}</strong>: ${e.forecast}%<br/>` +
+          `Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em></li>`;
       });
 
-    } catch (err) {
-      debug(`❌ enrichissement ${sym}: ${err.message}`);
-    }
-    await sleep(SLEEP_LONG);
+  } catch (err) {
+    debug('❌ fetchOpportunities error: ' + err.message);
+    ul.innerHTML = '<li>Erreur IA</li>';
   }
-
-  ul.innerHTML = '';
-  debug(`✅ Total enrichies : ${enriched.length}`);
-  enriched
-    .sort((a,b)=>parseFloat(b.forecast)-parseFloat(a.forecast))
-    .slice(0,5)
-    .forEach(e => {
-      ul.innerHTML += 
-        `<li><strong>${e.name}</strong>: ${e.forecast}%<br/>` +
-        `Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em></li>`;
-    });
 }
 
 // === 6. AFFICHAGE & ÉVÉNEMENTS ===
 async function refreshAll() {
-  const tA  = document.getElementById("tableAction"),
-        tC  = document.getElementById("tableCrypto"),
-        adv = document.getElementById("adviceList"),
-        perf= document.getElementById("globalPerf");
-  tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
-  let inv=0, val=0;
+  const tbodyA = document.getElementById("tableAction");
+  const tbodyC = document.getElementById("tableCrypto");
+  const advice = document.getElementById("adviceList");
+  const perf   = document.getElementById("globalPerf");
+  tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = '';
+  let inv = 0, val = 0;
 
   for (const a of portfolio) {
     const info = a.type === 'crypto'
       ? await fetchCrypto(a.sym, a.curr)
       : await fetchAction(a.sym);
     if (!info) continue;
-    const v  = info.price * a.qty,
-          g  = v - a.inv,
-          ch = info.change.toFixed(2),
-          cls= g >= 0 ? 'gain' : 'perte',
-          sign = g >= 0 ? '+' : '';
-    inv += a.inv; val += v;
+    const value = info.price * a.qty;
+    const gain  = value - a.inv;
+    const change= info.change?.toFixed(2) || '0.00';
+    const cls   = gain >= 0 ? 'gain' : 'perte';
+    const sign  = gain >= 0 ? '+' : '';
+    inv += a.inv; val += value;
 
-    tA.innerHTML +=
-      `<tr>
+    tbodyA.innerHTML += `
+      <tr>
         <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
-        <td>${info.price.toFixed(2)}</td><td>${v.toFixed(2)}</td>
-        <td class="${cls}">${sign}${ch}%</td><td>${info.currency}</td>
+        <td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td>
+        <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>
       </tr>`;
-    adv.innerHTML += `<li><strong>${a.sym}</strong>: ${
-      g >= 20 ? 'Vendre' : g <= -15 ? 'À risque' : 'Garder'
+    advice.innerHTML += `<li><strong>${a.sym}</strong>: ${
+      gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
     }</li>`;
   }
 
-  const totalGain = val - inv,
-        totalPct  = inv ? ((totalGain/inv)*100).toFixed(2) : 0;
+  const totalGain = val - inv;
+  const totalPct  = inv ? ((totalGain / inv) * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
   perf.style.color = totalGain >= 0 ? 'green' : 'red';
 
