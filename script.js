@@ -24,7 +24,7 @@ function clearMarketCaches() {
   });
 }
 
-// === 3. APPELS API ===
+// === 3. APPELS API DE BASE ===
 async function fetchExchangeRate() {
   try {
     const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
@@ -39,11 +39,9 @@ async function fetchExchangeRate() {
 async function fetchAction(sym) {
   try {
     const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
-    const data = await res.json();
-    const change = data.pc && data.pc !== 0
-      ? ((data.c - data.pc) / data.pc) * 100
-      : 0;
-    return { price: data.c, change, currency: 'USD' };
+    const d = await res.json();
+    const change = d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0;
+    return { price: d.c, change, currency: 'USD' };
   } catch {
     debug(`fetchAction error for ${sym}`);
     return null;
@@ -54,9 +52,9 @@ async function fetchCrypto(sym, curr) {
   try {
     const pair = sym.toUpperCase() + 'USDT';
     const res = await fetch(`${PROXY}binance?symbol=${pair}`);
-    const data = await res.json();
-    const usdPrice = parseFloat(data.lastPrice);
-    const usdChange = parseFloat(data.priceChangePercent);
+    const d = await res.json();
+    const usdPrice = parseFloat(d.lastPrice);
+    const usdChange = parseFloat(d.priceChangePercent);
     if (curr === 'CAD') {
       const rate = await fetchExchangeRate();
       return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
@@ -68,12 +66,31 @@ async function fetchCrypto(sym, curr) {
   }
 }
 
+// === 4. PRÉ-SÉLECTION AVANCÉE ===
+// 4.1 Récupérer 500 tickers CoinGecko en 5 pages
+async function fetchGeckoTickers(perPage = 100, pages = 5) {
+  const all = [];
+  for (let p = 1; p <= pages; p++) {
+    const res = await fetch(
+      `https://api.coingecko.com/api/v3/coins/markets` +
+      `?vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${p}` +
+      `&sparkline=false&price_change_percentage=24h`
+    );
+    const arr = await res.json();
+    if (!Array.isArray(arr)) break;
+    all.push(...arr);
+    await sleep(300);
+  }
+  return all.slice(0, perPage * pages);
+}
+
+// 4.2 Fonction fetchMarkets utilisant Paprika OU proxy CoinGecko -> tickers
 async function fetchMarkets(id, symbol) {
   const cacheKey = `market_cache_${id}`;
-  const saved = JSON.parse(localStorage.getItem(cacheKey) || '{}');
+  const cached = JSON.parse(localStorage.getItem(cacheKey) || '{}');
   const now = Date.now();
-  if (saved.timestamp && now - saved.timestamp < 3600000) {
-    return saved.data;
+  if (cached.timestamp && now - cached.timestamp < 3600000) {
+    return cached.data;
   }
 
   const api = getNextMarketApi();
@@ -86,12 +103,14 @@ async function fetchMarkets(id, symbol) {
       if (!r.ok) throw new Error(`Paprika HTTP ${r.status}`);
       json = await r.json();
     } else {
-      const r = await fetch(`${PROXY}coingecko-tickers?symbol=${symbol}`);
+      const r = await fetch(
+        `${PROXY}coingecko?endpoint=coins/${encodeURIComponent(id)}/tickers`
+      );
       if (!r.ok) throw new Error(`Gecko HTTP ${r.status}`);
       json = await r.json();
     }
 
-    // normalisation en tableau
+    // Normaliser en tableau
     let arr;
     if (Array.isArray(json)) {
       arr = json;
@@ -108,11 +127,11 @@ async function fetchMarkets(id, symbol) {
       ? arr.map(m => m.exchange_name)
       : arr.map(t => t.market.name);
     const liquidity = api === 'paprika'
-      ? arr.reduce((sum,m) => sum + (m.quote?.USD?.liquidity || 0), 0)
+      ? arr.reduce((s, m) => s + (m.quote?.USD?.liquidity || 0), 0)
       : 0;
 
     const isValid = exchanges.some(e =>
-      ['NDAX','Binance','Wealthsimple'].includes(e)
+      ['NDAX', 'Binance', 'Wealthsimple'].includes(e)
     ) && (api === 'gecko' || liquidity >= 5e6);
 
     const result = { isValid, liquidity, exchanges };
@@ -124,7 +143,8 @@ async function fetchMarkets(id, symbol) {
     return { isValid: false, liquidity: 0, exchanges: [] };
   }
 }
-// === 4. PRÉ-SÉLECTION DES TICKERS ===
+
+// 4.3 Combiner Paprika + Gecko en 1000 tickers
 async function getTickerList() {
   const results = [];
 
@@ -141,45 +161,33 @@ async function getTickerList() {
       debug('⚠️ CoinPaprika non-array');
     }
   } catch (e) {
-    debug('⚠️ CoinPaprika échoué : ' + e.message);
+    debug('⚠️ CoinPaprika échoué: ' + e.message);
   }
 
   // CoinGecko
   try {
-    await sleep(500);
-    const r2 = await fetch(
-      'https://api.coingecko.com/api/v3/coins/markets' +
-      '?vs_currency=usd&order=market_cap_desc&per_page=500&page=1' +
-      '&sparkline=false&price_change_percentage=24h'
-    );
-    if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
-    const d2 = await r2.json();
-    if (Array.isArray(d2)) {
-      const fmt = d2.map(d => ({
-        id: d.id,
-        symbol: d.symbol.toUpperCase(),
-        name: d.name,
-        quotes: { USD: {
-          market_cap: d.market_cap,
-          volume_24h: d.total_volume,
-          percent_change_24h: d.price_change_percentage_24h
-        }},
-        started_at: d.genesis_date,
-        rank: d.market_cap_rank
-      }));
-      results.push(...fmt);
-      debug(`✅ CoinGecko : ${d2.length} tickers (top 500)`);
-    } else {
-      debug('⚠️ CoinGecko non-array');
-    }
+    const geckoArr = await fetchGeckoTickers(100, 5);
+    const fmt = geckoArr.map(d => ({
+      id: d.id,
+      symbol: d.symbol.toUpperCase(),
+      name: d.name,
+      quotes: { USD: {
+        market_cap: d.market_cap,
+        volume_24h: d.total_volume,
+        percent_change_24h: d.price_change_percentage_24h
+      }},
+      started_at: d.genesis_date,
+      rank: d.market_cap_rank
+    }));
+    results.push(...fmt);
+    debug(`✅ CoinGecko : ${fmt.length} tickers (pages 1–5)`);
   } catch (e) {
-    debug('⚠️ CoinGecko échoué : ' + e.message);
+    debug('⚠️ CoinGecko échoué: ' + e.message);
   }
 
-  debug(`🔄 Total préfiltrage : ${results.length}`);
+  debug(`🔄 Total combiné pour préfiltrage : ${results.length}`);
   return results;
 }
-
 // === 5. ENRICHISSEMENT IA ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
@@ -257,7 +265,7 @@ async function fetchOpportunities() {
     ul.innerHTML = '';
     debug(`✅ Total enrichies : ${enriched.length}`);
     enriched
-      .sort((a,b)=>parseFloat(b.forecast)-parseFloat(a.forecast))
+      .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
       .slice(0,5)
       .forEach(e => {
         ul.innerHTML += 
