@@ -102,9 +102,18 @@ debug(`Tickers list: ${tickers.map(t => t.symbol).join(', ')}`);
       }
       // 2. Marchés & liquidité
       debug(`Fetching markets for ${sym}`);
-      const markets = await fetch(`${PROXY}coinpaprika-markets?id=${t.id}`)
-        .then(r => r.json()).catch(() => []);
-      await sleep(100);
+      let markets = [];
+try {
+  const url = `${PROXY}coinpaprika-markets?id=${t.id}`;
+  debug(`Fetching markets URL: ${url}`);
+  const resM = await fetch(url);
+  debug(`Markets fetch status for ${sym}: ${resM.status}`);
+  markets = await resM.json();
+} catch (e) {
+  debug(`Error fetching markets for ${sym}: ${e.message}`);
+}
+await sleep(100);
+debug(`Markets count for ${sym}: ${markets.length}`);
       debug(`Markets count for ${sym}: ${markets.length}`);
       const allowedEx = ['NDAX','Binance','Wealthsimple'];
       const hasEx = markets.some(m => allowedEx.includes(m.exchange_name));
