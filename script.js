@@ -135,8 +135,11 @@ async function fetchOpportunities() {
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
   debug('--- Début fetchOpportunities ---');
 
-  // 5.1 – filtres
+  // **AJOUTÉ** : log du total brut
   const all     = await getTickerList();
+  debug(`🔄 Total combiné pour préfiltrage : ${all.length}`);
+
+  // 5.1 – filtres
   const tickers = all.filter(t => {
     const u    = t.quotes.USD;
     const born = t.started_at ? new Date(t.started_at).getTime() : 0;
@@ -149,6 +152,9 @@ async function fetchOpportunities() {
            !t.id.includes('testnet') &&
            !ban.some(w => t.name.toLowerCase().includes(w));
   });
+
+  // **AJOUTÉ** : log du nombre après filtres
+  debug(`🔍 Cryptos retenues après filtres : ${tickers.length}`);
 
   // 5.2 – enrichissement séquentiel des 50 premiers
   const enriched = [];
@@ -252,8 +258,8 @@ async function refreshAll() {
       <tr>
         <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
         <td>${info.price.toFixed(2)}</td><td>${v.toFixed(2)}</td>
-        <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>
-      </tr>`;
+        <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>`
+    ;
     adv.innerHTML += `<li><strong>${a.sym}</strong>: ${
       gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
     }</li>`;
