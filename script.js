@@ -2,34 +2,44 @@
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
 let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 const BUTTON_COOLDOWN = 60 * 60 * 1000;
-let marketApiIndex = 0;
-const marketApis = ['paprika', 'gecko'];
+const SLEEP_SHORT = 300;
+const SLEEP_LONG  = 500;
 
-// === 2. OUTILS ===
-function getNextMarketApi() {
-  const api = marketApis[marketApiIndex % marketApis.length];
-  marketApiIndex++;
-  return api;
-}
+// client-side rate limiter
+const lastCall = { paprika: 0, gecko: 0 };
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
 }
+async function rateLimitedFetch(url, apiType) {
+  const now = Date.now();
+  const minInterval = apiType === 'gecko'
+    ? 2000    // 30 calls/min ⇒ ~1 every 2000 ms
+    : 100;    // 10 calls/s ⇒ ~1 every 100 ms
+  const wait = minInterval - (now - lastCall[apiType]);
+  if (wait > 0) await sleep(wait);
+  lastCall[apiType] = Date.now();
+  return fetch(url);
+}
+
 function debug(msg) {
   const el = document.getElementById('debugConsole');
   if (el) el.innerHTML += `${new Date().toLocaleTimeString()} – ${msg}<br>`;
 }
 function clearMarketCaches() {
-  Object.keys(localStorage).forEach(key => {
-    if (key.startsWith('market_cache_')) localStorage.removeItem(key);
+  Object.keys(localStorage).forEach(k => {
+    if (k.startsWith('market_cache_')) localStorage.removeItem(k);
   });
 }
 
-// === 3. APPELS API DE BASE ===
+// === 2. APPELS ACTIONS & CRYPTO ===
 async function fetchExchangeRate() {
   try {
-    const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=CAD");
-    const data = await res.json();
-    return data.rates?.CAD || 1.35;
+    const r = await rateLimitedFetch(
+      "https://api.exchangerate.host/latest?base=USD&symbols=CAD",
+      'paprika'
+    );
+    const d = await r.json();
+    return d.rates?.CAD || 1.35;
   } catch {
     debug('fetchExchangeRate failed, using 1.35');
     return 1.35;
@@ -38,8 +48,11 @@ async function fetchExchangeRate() {
 
 async function fetchAction(sym) {
   try {
-    const res = await fetch(`${PROXY}finnhub?symbol=${sym.toUpperCase()}`);
-    const d = await res.json();
+    const r = await rateLimitedFetch(
+      `${PROXY}finnhub?symbol=${sym.toUpperCase()}`,
+      'paprika'
+    );
+    const d = await r.json();
     const change = d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0;
     return { price: d.c, change, currency: 'USD' };
   } catch {
@@ -51,107 +64,47 @@ async function fetchAction(sym) {
 async function fetchCrypto(sym, curr) {
   try {
     const pair = sym.toUpperCase() + 'USDT';
-    const res = await fetch(`${PROXY}binance?symbol=${pair}`);
-    const d = await res.json();
-    const usdPrice  = parseFloat(d.lastPrice);
-    const usdChange = parseFloat(d.priceChangePercent);
+    const r = await rateLimitedFetch(
+      `${PROXY}binance?symbol=${pair}`,
+      'paprika'
+    );
+    const d = await r.json();
+    const price  = parseFloat(d.lastPrice);
+    const change = parseFloat(d.priceChangePercent);
     if (curr === 'CAD') {
       const rate = await fetchExchangeRate();
-      return { price: usdPrice * rate, change: usdChange, currency: 'CAD' };
+      return { price: price * rate, change, currency: 'CAD' };
     }
-    return { price: usdPrice, change: usdChange, currency: 'USD' };
+    return { price, change, currency: 'USD' };
   } catch {
     debug(`fetchCrypto error for ${sym}`);
     return null;
   }
 }
-
-// === 4. PRÉ-SÉLECTION AVANCÉE ===
-// 4.1. Récupère 500 tickers Gecko en 5 pages
-async function fetchGeckoTickers(perPage = 100, pages = 5) {
+// === 3. PRÉ-SÉLECTION – ratio 10:1 (Paprika:Gecko) ===
+async function fetchGeckoTickers(perPage = 100, pages = 1) {
   const all = [];
   for (let p = 1; p <= pages; p++) {
-    const res = await fetch(
-      `https://api.coingecko.com/api/v3/coins/markets` +
-      `?vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${p}` +
-      `&sparkline=false&price_change_percentage=24h`
+    const r = await rateLimitedFetch(
+      `${PROXY}coingecko?endpoint=coins/markets` +
+      `&vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${p}` +
+      `&sparkline=false&price_change_percentage=24h`,
+      'gecko'
     );
-    const arr = await res.json();
+    const arr = await r.json();
     if (!Array.isArray(arr)) break;
     all.push(...arr);
-    await sleep(300);
+    await sleep(SLEEP_SHORT);
   }
   return all.slice(0, perPage * pages);
 }
 
-// 4.2. Appelle Paprika OU Gecko pour valider les marchés
-async function fetchMarkets(id, symbol) {
-  const cacheKey = `market_cache_${id}`;
-  const cached  = JSON.parse(localStorage.getItem(cacheKey) || '{}');
-  const now     = Date.now();
-  if (cached.timestamp && now - cached.timestamp < 3600000) {
-    return cached.data;
-  }
-
-  const api = getNextMarketApi();
-  await sleep(300);
-
-  try {
-    let json;
-    if (api === 'paprika') {
-      const r = await fetch(`${PROXY}coinpaprika-markets?id=${id}`);
-      if (!r.ok) throw new Error(`Paprika HTTP ${r.status}`);
-      json = await r.json();
-    } else {
-      const r = await fetch(
-        `${PROXY}coingecko?endpoint=coins/${encodeURIComponent(id)}/tickers`
-      );
-      if (!r.ok) throw new Error(`Gecko HTTP ${r.status}`);
-      json = await r.json();
-    }
-
-    // normalisation en tableau
-    let arr;
-    if (Array.isArray(json)) {
-      arr = json;
-    } else if (Array.isArray(json.data)) {
-      arr = json.data;
-    } else if (Array.isArray(json.tickers)) {
-      arr = json.tickers;
-    } else {
-      debug(`⚠️ fetchMarkets ${symbol}: format inattendu`);
-      return { isValid: false, liquidity: 0, exchanges: [] };
-    }
-
-    const exchanges = api === 'paprika'
-      ? arr.map(m => m.exchange_name)
-      : arr.map(t => t.market.name);
-    const liquidity = api === 'paprika'
-      ? arr.reduce((s, m) => s + (m.quote?.USD?.liquidity || 0), 0)
-      : 0;
-
-    const isValid = exchanges.some(e =>
-      ['NDAX', 'Binance', 'Wealthsimple'].includes(e)
-    ) && (api === 'gecko' || liquidity >= 5e6);
-
-    const result = { isValid, liquidity, exchanges };
-    localStorage.setItem(cacheKey, JSON.stringify({ timestamp: now, data: result }));
-    return result;
-
-  } catch (err) {
-    debug(`❌ fetchMarkets error for ${symbol} via ${api}: ${err.message}`);
-    return { isValid: false, liquidity: 0, exchanges: [] };
-  }
-}
-// === 5. PRÉ-SÉLECTION COMPLÈTE ===
 async function getTickerList() {
   const results = [];
 
-  // CoinPaprika (500 tickers)
+  // ––– 1 appel CoinPaprika pour 500 tickers
   try {
-    const r1 = await fetch(`${PROXY}coinpaprika`);
-    if (!r1.ok) throw new Error(`HTTP ${r1.status}`);
-    await sleep(500);
+    const r1 = await rateLimitedFetch(`${PROXY}coinpaprika`, 'paprika');
     const d1 = await r1.json();
     if (Array.isArray(d1)) {
       results.push(...d1.slice(0, 500));
@@ -160,12 +113,12 @@ async function getTickerList() {
       debug('⚠️ CoinPaprika non-array');
     }
   } catch (e) {
-    debug('⚠️ CoinPaprika échoué : ' + e.message);
+    debug('⚠️ CoinPaprika failed: ' + e.message);
   }
 
-  // CoinGecko (500 tickers via 5 pages)
+  // ––– 1 appel Gecko pour 100 tickers
   try {
-    const geckoArr = await fetchGeckoTickers(100, 5);
+    const geckoArr = await fetchGeckoTickers(100, 1);
     const fmt = geckoArr.map(d => ({
       id: d.id,
       symbol: d.symbol.toUpperCase(),
@@ -179,16 +132,81 @@ async function getTickerList() {
       rank: d.market_cap_rank
     }));
     results.push(...fmt);
-    debug(`✅ CoinGecko : ${fmt.length} tickers (pages 1–5)`);
+    debug(`✅ CoinGecko : ${fmt.length} tickers (page 1)`);
   } catch (e) {
-    debug('⚠️ CoinGecko échoué : ' + e.message);
+    debug('⚠️ CoinGecko failed: ' + e.message);
   }
 
   debug(`🔄 Total combiné pour préfiltrage : ${results.length}`);
   return results;
 }
 
-// === 6. ENRICHISSEMENT IA ===
+// === 4. VALIDATION DES MARCHÉS – ratio 10:1 ===
+// Génère un tableau de 10 "paprika" suivis d'1 "gecko"
+const marketApis = Array(10).fill('paprika').concat('gecko');
+let marketApiIndex = 0;
+
+async function fetchMarkets(id, symbol) {
+  const key = `market_cache_${id}`;
+  const c   = JSON.parse(localStorage.getItem(key) || '{}');
+  const now = Date.now();
+  if (c.timestamp && now - c.timestamp < 3600000) return c.data;
+
+  const api = marketApis[marketApiIndex % marketApis.length];
+  marketApiIndex++;
+  await sleep(SLEEP_SHORT);
+
+  try {
+    let json;
+    if (api === 'paprika') {
+      const r = await rateLimitedFetch(
+        `${PROXY}coinpaprika-markets?id=${id}`,
+        'paprika'
+      );
+      json = await r.json();
+    } else {
+      const r = await rateLimitedFetch(
+        `${PROXY}coingecko?endpoint=coins/${encodeURIComponent(id)}/tickers`,
+        'gecko'
+      );
+      json = await r.json();
+    }
+
+    // normalisation en tableau
+    let arr = Array.isArray(json)
+      ? json
+      : Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.tickers)
+          ? json.tickers
+          : null;
+
+    if (!arr) {
+      debug(`⚠️ fetchMarkets ${symbol}: format inattendu`);
+      return { isValid: false, liquidity: 0, exchanges: [] };
+    }
+
+    const exchanges = api === 'paprika'
+      ? arr.map(m => m.exchange_name)
+      : arr.map(t => t.market.name);
+    const liquidity = api === 'paprika'
+      ? arr.reduce((s,m)=>s+(m.quote?.USD?.liquidity||0),0)
+      : 0;
+    const valid = exchanges.some(e =>
+      ['NDAX','Binance','Wealthsimple'].includes(e)
+    ) && (api==='gecko' || liquidity >= 5e6);
+
+    const res = { isValid: valid, liquidity, exchanges };
+    localStorage.setItem(key, JSON.stringify({ timestamp: now, data: res }));
+    return res;
+
+  } catch (err) {
+    debug(`❌ fetchMarkets error for ${symbol} via ${api}: ${err.message}`);
+    return { isValid:false, liquidity:0, exchanges:[] };
+  }
+}
+
+// === 5. ENRICHISSEMENT IA ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
@@ -197,75 +215,78 @@ async function fetchOpportunities() {
   try {
     const all     = await getTickerList();
     const tickers = all.filter(t => {
-      const usd = t.quotes?.USD || {};
-      const started    = t.started_at ? new Date(t.started_at).getTime() : 0;
-      const oneYearAgo = Date.now() - 365*24*60*60*1000;
-      const banned     = ['elon','cum','baby','moon','trump'];
-      return usd.market_cap   >= 5e6 &&
-             usd.volume_24h   >= 1e6 &&
-             started          < oneYearAgo &&
-             t.rank           < 500 &&
+      const u = t.quotes.USD;
+      const age = t.started_at ? new Date(t.started_at).getTime() : 0;
+      const oneY = Date.now() - 365*24*60*60*1000;
+      const ban  = ['elon','cum','baby','moon','trump'];
+      return u.market_cap >= 5e6 &&
+             u.volume_24h >= 1e6 &&
+             age < oneY &&
+             t.rank < 500 &&
              !t.id.includes('testnet') &&
-             !banned.some(w => t.name.toLowerCase().includes(w));
+             !ban.some(w => t.name.toLowerCase().includes(w));
     });
 
     const enriched = [];
-    for (let i = 0; i < tickers.length && enriched.length < 50; i++) {
-      const t   = tickers[i];
-      const sym = t.symbol;
+    for (let i=0; i<tickers.length && enriched.length<50; i++) {
+      const t   = tickers[i], sym = t.symbol;
       try {
-        const mInfo = await fetchMarkets(t.id, sym);
-        if (!mInfo.isValid) {
+        const mk = await fetchMarkets(t.id, sym);
+        if (!mk.isValid) {
           debug(`⏭ ${sym} exclu – marché non valide`);
           continue;
         }
-
-        const [newsR, rsiR, macdR, evtR, onchR, socR] = await Promise.all([
-          fetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`),
-          fetch(`${PROXY}rsi?symbol=${sym}`),
-          fetch(`${PROXY}macd?symbol=${sym}`),
-          fetch(`${PROXY}events?coins=${sym}`),
-          fetch(`${PROXY}onchain?symbol=${sym}`),
-          fetch(`${PROXY}community?symbol=${sym}`)
+        const [newsR,rsiR,macdR,evtR,onR,socR] = await Promise.all([
+          rateLimitedFetch(`${PROXY}news?q=${encodeURIComponent(t.name)}`, 'paprika'),
+          rateLimitedFetch(`${PROXY}rsi?symbol=${sym}`, 'paprika'),
+          rateLimitedFetch(`${PROXY}macd?symbol=${sym}`, 'paprika'),
+          rateLimitedFetch(`${PROXY}events?coins=${sym}`, 'paprika'),
+          rateLimitedFetch(`${PROXY}onchain?symbol=${sym}`, 'paprika'),
+          rateLimitedFetch(`${PROXY}community?symbol=${sym}`, 'paprika')
         ]);
-
-        const news       = await newsR.json();
-        const rsi        = (await rsiR.json()).value;
-        const macdData   = await macdR.json();
-        const evt        = await evtR.json();
-        const onch       = await onchR.json();
-        const soc        = await socR.json();
-        const macdSignal = macdData.valueMACDSignal;
-        const macdVal    = macdData.valueMACD;
+        const news    = await newsR.json();
+        const rsi     = (await rsiR.json()).value;
+        const macdJ   = await macdR.json();
+        const evt     = await evtR.json();
+        const onch    = await onR.json();
+        const soc     = await socR.json();
+        const macdSig = macdJ.valueMACDSignal;
+        const macdVal = macdJ.valueMACD;
 
         const boosts = [
-          news.articles?.length                            ? 1.2 : 1,
-          (rsi < 30 && (macdVal - macdSignal) > 0)         ? 1.2 : 1,
-          evt.body?.length > 0                             ? 1.2 : 1,
-          (onch.data?.value || 0) > 500                    ? 1.2 : 1,
-          soc.score > 70                                   ? 1.2 : 1
+          news.articles?.length       ? 1.2 : 1,
+          (rsi<30 && macdVal>macdSig) ? 1.2 : 1,
+          evt.body?.length > 0        ? 1.2 : 1,
+          (onch.data?.value||0) > 500 ? 1.2 : 1,
+          soc.score > 70              ? 1.2 : 1
         ];
 
-        const raw      = t.quotes?.USD?.percent_change_24h || 0;
-        const forecast = raw * boosts.reduce((a,b) => a*b, 1);
-        const confidence = ((boosts.reduce((a,b) => a+b, 0)/5)*5).toFixed(1);
-
+        const raw      = t.quotes.USD.percent_change_24h || 0;
+        const forecast = raw * boosts.reduce((a,b)=>a*b,1);
+        const conf     = ((boosts.reduce((a,b)=>a+b,0)/5)*5).toFixed(1);
         if (forecast < 20) continue;
-        enriched.push({ name: sym, forecast: forecast.toFixed(1), confidence, reason: news.articles?.[0]?.title || 'Pas d’actualité' });
 
-      } catch(err) {
-        debug(`❌ Erreur enrichissement ${sym}: ${err.message}`);
+        enriched.push({
+          name: sym,
+          forecast: forecast.toFixed(1),
+          confidence: conf,
+          reason: news.articles?.[0]?.title || 'Pas d’actualité'
+        });
+
+      } catch (e) {
+        debug(`❌ enrich ${sym}: ${e.message}`);
       }
-      await sleep(500);
+      await sleep(SLEEP_LONG);
     }
 
     ul.innerHTML = '';
     debug(`✅ Total enrichies : ${enriched.length}`);
-    enriched
-      .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+    enriched.sort((a,b)=>b.forecast-a.forecast)
       .slice(0,5)
       .forEach(e => {
-        ul.innerHTML += `<li><strong>${e.name}</strong>: ${e.forecast}%<br/>Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em></li>`;
+        ul.innerHTML +=
+          `<li><strong>${e.name}</strong>: ${e.forecast}%<br/>` +
+          `Confiance IA: ${e.confidence}/10<br/><em>${e.reason}</em></li>`;
       });
 
   } catch(err) {
@@ -274,43 +295,37 @@ async function fetchOpportunities() {
   }
 }
 
-// === 7. AFFICHAGE & ÉVÉNEMENTS ===
+// === 6. AFFICHAGE & ÉVÉNEMENTS ===
 async function refreshAll() {
-  const tbodyA = document.getElementById("tableAction");
-  const tbodyC = document.getElementById("tableCrypto");
-  const advice = document.getElementById("adviceList");
-  const perf   = document.getElementById("globalPerf");
-  tbodyA.innerHTML = tbodyC.innerHTML = advice.innerHTML = '';
-  let inv = 0, val = 0;
-
+  const tA  = document.getElementById("tableAction"),
+        tC  = document.getElementById("tableCrypto"),
+        adv = document.getElementById("adviceList"),
+        perf= document.getElementById("globalPerf");
+  tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
+  let inv=0, val=0;
   for (const a of portfolio) {
-    const info = a.type === 'crypto'
-      ? await fetchCrypto(a.sym, a.curr)
+    const info = a.type==='crypto'
+      ? await fetchCrypto(a.sym,a.curr)
       : await fetchAction(a.sym);
     if (!info) continue;
-    const value = info.price * a.qty;
-    const gain  = value - a.inv;
-    const change= info.change?.toFixed(2) || '0.00';
-    const cls   = gain >= 0 ? 'gain' : 'perte';
-    const sign  = gain >= 0 ? '+' : '';
-    inv += a.inv; val += value;
-
-    tbodyA.innerHTML += `
-      <tr>
-        <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
-        <td>${info.price.toFixed(2)}</td><td>${value.toFixed(2)}</td>
-        <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>
-      </tr>`;
-    advice.innerHTML += `<li><strong>${a.sym}</strong>: ${
-      gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
+    const v    = info.price*a.qty,
+          g    = v - a.inv,
+          ch   = info.change.toFixed(2),
+          cls  = g>=0?'gain':'perte',
+          sign = g>=0?'+':'';
+    inv+=a.inv; val+=v;
+    tA.innerHTML +=
+      `<tr><td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>`+
+      `<td>${info.price.toFixed(2)}</td><td>${v.toFixed(2)}</td>`+
+      `<td class="${cls}">${sign}${ch}%</td><td>${info.currency}</td></tr>`;
+    adv.innerHTML += `<li><strong>${a.sym}</strong>: ${
+      g>=20?'Vendre':g<=-15?'À risque':'Garder'
     }</li>`;
   }
-
-  const totalGain = val - inv;
-  const totalPct  = inv ? ((totalGain/inv)*100).toFixed(2) : 0;
+  const totalGain = val-inv,
+        totalPct  = inv?((totalGain/inv)*100).toFixed(2):0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color = totalGain >= 0 ? 'green' : 'red';
-
+  perf.style.color = totalGain>=0?'green':'red';
   await fetchOpportunities();
 }
 
@@ -319,7 +334,6 @@ document.getElementById('refreshBtn')?.addEventListener('click', async () => {
   document.getElementById('refreshBtn').disabled = true;
   debug('🔄 Rafraîchissement IA lancé');
   clearMarketCaches();
-  localStorage.removeItem('coinpaprika_cache');
   await fetchOpportunities();
   setTimeout(() => {
     document.getElementById('refreshBtn').disabled = false;
