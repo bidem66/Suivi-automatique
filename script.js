@@ -113,7 +113,12 @@ try {
   debug(`Error fetching markets for ${sym}: ${e.message}`);
 }
 await sleep(100);
-debug(`Markets count for ${sym}: ${markets.length}`);
+if (Array.isArray(markets)) {
+  debug(`Markets count for ${sym}: ${markets.length}`);
+} else {
+  debug(`Markets response for ${sym}: ${JSON.stringify(markets)}`);
+  debug(`Markets count for ${sym}: not an array`);
+}
       debug(`Markets count for ${sym}: ${markets.length}`);
       const allowedEx = ['NDAX','Binance','Wealthsimple'];
       const hasEx = markets.some(m => allowedEx.includes(m.exchange_name));
