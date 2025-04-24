@@ -121,7 +121,7 @@ async function getTickerList() {
   debug(`🔄 Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
-// === 5. ENRICHISSEMENT IA & TOP 50 ===
+// === 5. ENRICHISSEMENT IA & AFFICHAGE TOP 50 ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
@@ -166,13 +166,9 @@ async function fetchOpportunities() {
 
     let news, rsi, macdData, evt, onch;
     try {
-      const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
-
-      // News
+      // News simplifiée (pas de from/sortBy/pageSize)
       let res = await safeFetch(
-        `${PROXY}news?` +
-        `q=${encodeURIComponent(t.name)}` +
-        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
+        `${PROXY}news?q=${encodeURIComponent(t.name)}`,
         `News ${sym}`
       );
       news = await safeJson(res, `News ${sym}`);
@@ -201,8 +197,8 @@ async function fetchOpportunities() {
       continue;
     }
 
-    // calcul des boosts
-    const sig = macdData?.valueMACDSignal || 0;
+    // calcul des boosts (0 ou 1)
+    const sig  = macdData?.valueMACDSignal || 0;
     const valm = macdData?.valueMACD       || 0;
     const boosts = [
       news?.articles?.length         ? 1 : 0,
@@ -210,14 +206,14 @@ async function fetchOpportunities() {
       (evt?.body?.length > 0)        ? 1 : 0,
       ((onch?.data?.value||0) > 500) ? 1 : 0
     ];
-    const activeBoosts = boosts.reduce((a,b) => a + b, 0);
-    const confidence = (activeBoosts / boosts.length * 10).toFixed(1);
+    const activeBoosts = boosts.reduce((sum, x) => sum + x, 0);
+    const confidence   = (activeBoosts / boosts.length * 10).toFixed(1);
 
     // forecast 7 jours
-    const rawPct = t.quotes.USD.percent_change_24h || 0;
+    const rawPct  = t.quotes.USD.percent_change_24h || 0;
     const forecast = rawPct * (1 + activeBoosts * 0.2) * 7;
 
-    // extraire la news
+    // extraire la première news si dispo
     const article = news?.articles?.[0];
     const headline = article?.title || 'Pas d’actualité';
     let dateStr = '';
@@ -239,7 +235,6 @@ async function fetchOpportunities() {
 
     await sleep(SLEEP_LONG);
   }
-
   debug(`✅ Total enrichis: ${enriched.length}`);
 
   // 5.3 – trier et afficher les 50 meilleurs
@@ -252,9 +247,10 @@ async function fetchOpportunities() {
         <li>
           <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
+          <em>${e.headline}${e.dateStr ? ` (${e.dateStr})` : ''}</em><br/>
           ${e.url
-            ? `<em>${e.headline} (${e.dateStr})</em><br/><a href="${e.url}" target="_blank">📰 Lire l’actu</a>`
-            : `<em>${e.headline}</em>`}
+            ? `<a href="${e.url}" target="_blank">📰 Lire l’actu</a>`
+            : ''}
         </li>`;
     });
 }
@@ -293,8 +289,8 @@ async function refreshAll() {
 
   const totalGain = val - inv;
   const totalPct  = inv ? ((totalGain / inv) * 100).toFixed(2) : 0;
-  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color   = totalGain >= 0 ? 'green' : 'red';
+  perf.textContent  = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color  = totalGain >= 0 ? 'green' : 'red';
 
   await fetchOpportunities();
 }
