@@ -130,7 +130,7 @@ async function getTickerList() {
   return results;
 }
 
-// === 5. ENRICHISSEMENT IA (100 candidats → 50 retenus → 5 affichés) ===
+// === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 50 affichés) ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
@@ -167,77 +167,45 @@ async function fetchOpportunities() {
     .sort((a,b) => b.preScore - a.preScore);
   const candidates = scored.slice(0, 100);
   debug(`🎯 100 meilleurs pré-sélectionnés (score ≥ ${candidates[candidates.length-1]?.preScore.toFixed(3)})`);
-  // 5.2 – enrichir ces 100, jusqu’à 50 retenus
+  // 5.2 – enrichir ces 100 candidats
   const enriched = [];
   for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
     const t   = candidates[i];
     const sym = t.symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
 
-    // fetch séquentiel avec pauses
     let news, rsi, macdData, evt, onch;
     try {
-      // date 7 jours
       const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
 
-      // News principale (avec date + domaines restreints)
-      let res = await safeFetch(
+      // News
+      const resNews = await safeFetch(
         `${PROXY}news?` +
         `q=${encodeURIComponent(t.name)}` +
-        `&pageSize=1&sortBy=publishedAt` +
-        `&from=${fromDate}` +
-        `&domains=cointelegraph.com,coindesk.com,coinmarketcap.com`,
+        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
         `News ${sym}`
       );
-      news = await safeJson(res, `News ${sym}`);
+      news = await safeJson(resNews, `News ${sym}`);
       await sleep(200);
 
-      // **Fallback 1** (sans date mais domaines)
-      if (!news?.articles?.length) {
-        res  = await safeFetch(
-          `${PROXY}news?` +
-          `q=${encodeURIComponent(t.name)}` +
-          `&pageSize=1&sortBy=publishedAt` +
-          `&domains=cointelegraph.com,coindesk.com,coinmarketcap.com`,
-          `News ${sym} fallback`
-        );
-        const nf = await safeJson(res, `News ${sym} fallback`);
-        if (nf?.articles?.length) news = nf;
-        await sleep(200);
-      }
-
-      // **Fallback 2** (sans domaines ni date)
-      if (!news?.articles?.length) {
-        res  = await safeFetch(
-          `${PROXY}news?` +
-          `q=${encodeURIComponent(t.name)}` +
-          `&pageSize=1&sortBy=publishedAt`,
-          `News ${sym} fallback2`
-        );
-        const n2 = await safeJson(res, `News ${sym} fallback2`);
-        if (n2?.articles?.length) news = n2;
-        await sleep(200);
-      }
-
       // RSI
-      res       = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
-      rsi       = (await safeJson(res, 'RSI'))?.value;
+      const resRsi = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
+      rsi = (await safeJson(resRsi, 'RSI'))?.value;
       await sleep(200);
 
       // MACD
-      res       = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
-      macdData  = await safeJson(res, 'MACD');
+      const resMacd = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
+      macdData = await safeJson(resMacd, 'MACD');
       await sleep(200);
 
       // Events
-      res       = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
-      evt       = await safeJson(res, 'Events');
+      const resEvt = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
+      evt = await safeJson(resEvt, 'Events');
       await sleep(200);
 
       // On-chain
-      res       = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
-      onch      = await safeJson(res, 'Onchain');
-
+      const resOn  = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
+      onch = await safeJson(resOn, 'Onchain');
     } catch (err) {
       debug(`❌ Erreur IA fetch pour ${sym}: ${err.message}`);
       continue;
@@ -256,52 +224,48 @@ async function fetchOpportunities() {
     // forecast 7 jours
     const rawPct   = t.quotes.USD.percent_change_24h || 0;
     const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
+    // ** nouveau calcul de la confiance IA **
+    const productBoost = boosts.reduce((a,b)=>a*b,1);
+    const confidence   = ((productBoost - 1) / (1.2**4 - 1) * 10).toFixed(1);
 
-    // **Confiance IA** avec score minimal
-    const countBoosts = boosts.filter(b => b > 1).length;
-    const baseScore   = countBoosts ? 2 : 0;
-    const dynamic     = (countBoosts / boosts.length) * 8;
-    const confidence  = (baseScore + dynamic).toFixed(1);
-
-    // si forecast suffisant, on garde
-    if (forecast >= 20) {
-      // date article
-      const art = news?.articles?.[0];
-      const newsDate = art?.publishedAt
-        ? new Date(art.publishedAt).toLocaleDateString('fr-FR', {
-            year:'numeric',month:'2-digit',day:'2-digit',
-            hour:'2-digit',minute:'2-digit'
-          })
-        : '';
+    if (forecast >= 0) {
+      // extraire date & titre de la news
+      const article = news?.articles?.[0];
+      let dateStr = '';
+      if (article?.publishedAt) {
+        dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+      }
       enriched.push({
         name: sym,
         forecast: forecast.toFixed(1),
         confidence,
-        reason: art?.title || 'Pas d’actualité',
-        newsDate,
-        newsUrl: art?.url
+        headline: article?.title || 'Pas d’actualité',
+        newsDate: dateStr,
+        newsUrl: article?.url
       });
     }
 
     await sleep(SLEEP_LONG);
   }
-
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
-  // 5.3 – trier et afficher top 5
+  // 5.3 – trier et afficher les 50 meilleurs
   ul.innerHTML = '';
   enriched
     .sort((a,b)=> parseFloat(b.forecast) - parseFloat(a.forecast))
-    .slice(0,5)
+    .slice(0,50)
     .forEach(e => {
       ul.innerHTML += `
         <li>
           <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
-          <em>${e.reason}</em><br/>
+          <em>${e.headline}</em><br/>
           ${e.newsUrl
-            ? `<a href="${e.newsUrl}" target="_blank">📰 <small>(${e.newsDate})</small></a>`
-            : '<em>Aucune actualité disponible</em>'}
+            ? `<a href="${e.newsUrl}" target="_blank">📰 Lire l’actu <small>(${e.newsDate})</small></a>`
+            : '<em>Pas d’actualité</em>'}
         </li>`;
     });
 }
