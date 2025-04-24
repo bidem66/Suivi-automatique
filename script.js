@@ -6,7 +6,15 @@ let portfolio = JSON.parse(localStorage.getItem('portfolio') || '[]');
 const BUTTON_COOLDOWN = 60 * 60 * 1000;
 const SLEEP_SHORT = 300;
 const SLEEP_LONG  = 500;
-
+// === Début auto-test des clés API ===
+console.log('🔍 Vérification des clés API :');
+console.log(' • NEWSAPI_KEY       :', process.env.NEWSAPI_KEY       ? '[OK]' : '[❌ MISSING]');
+console.log(' • RSI_SECRET_KEY    :', process.env.RSI_SECRET_KEY    ? '[OK]' : '[❌ MISSING]');
+console.log(' • MACD_SECRET_KEY   :', process.env.MACD_SECRET_KEY   ? '[OK]' : '[❌ MISSING]');
+console.log(' • EVENTS_API_TOKEN  :', process.env.EVENTS_API_TOKEN  ? '[OK]' : '[❌ MISSING]');
+console.log(' • ONCHAIN_API_TOKEN :', process.env.ONCHAIN_API_TOKEN ? '[OK]' : '[❌ MISSING]');
+console.log('================================');
+// === Fin auto-test des clés API ===
 // === 2. OUTILS DE FETCH SÉCURISÉ ===
 function sleep(ms) {
   return new Promise(res => setTimeout(res, ms));
