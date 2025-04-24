@@ -224,27 +224,33 @@ async function fetchOpportunities() {
     // forecast 7 jours
     const rawPct   = t.quotes.USD.percent_change_24h || 0;
     const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
-    // ** nouveau calcul de la confiance IA **
-    const productBoost = boosts.reduce((a,b)=>a*b,1);
-    const confidence   = ((productBoost - 1) / (1.2**4 - 1) * 10).toFixed(1);
 
-    if (forecast >= 0) {
-      // extraire date & titre de la news
-      const article = news?.articles?.[0];
-      let dateStr = '';
-      if (article?.publishedAt) {
+    // ** nouveau calcul de la confiance IA **
+    const met = boosts.filter(b=>b>1).length;
+    const confidence = (met / boosts.length * 10).toFixed(1);
+
+    // extraire la news
+    const article = news?.articles?.[0];
+    let headline = 'Pas d’actualité';
+    let dateStr  = '';
+    if (article?.title) {
+      headline = article.title;
+      if (article.publishedAt) {
         dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
           year: 'numeric', month: '2-digit', day: '2-digit',
           hour: '2-digit', minute: '2-digit'
         });
       }
+    }
+
+    if (forecast >= 0) {
       enriched.push({
         name: sym,
         forecast: forecast.toFixed(1),
         confidence,
-        headline: article?.title || 'Pas d’actualité',
-        newsDate: dateStr,
-        newsUrl: article?.url
+        headline,
+        dateStr,
+        url: article?.url
       });
     }
 
@@ -252,7 +258,7 @@ async function fetchOpportunities() {
   }
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
-  // 5.3 – trier et afficher les 50 meilleurs
+  // 5.3 – trier et afficher les 50
   ul.innerHTML = '';
   enriched
     .sort((a,b)=> parseFloat(b.forecast) - parseFloat(a.forecast))
@@ -262,10 +268,10 @@ async function fetchOpportunities() {
         <li>
           <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
-          <em>${e.headline}</em><br/>
-          ${e.newsUrl
-            ? `<a href="${e.newsUrl}" target="_blank">📰 Lire l’actu <small>(${e.newsDate})</small></a>`
-            : '<em>Pas d’actualité</em>'}
+          <em>${e.headline}${e.dateStr ? ` (${e.dateStr})` : ''}</em><br/>
+          ${e.url
+            ? `<a href="${e.url}" target="_blank">📰 Lire l’actu</a>`
+            : ''}
         </li>`;
     });
 }
