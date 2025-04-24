@@ -1,4 +1,4 @@
-// === script.js – Bloc 1 ===
+// === Bloc 1 : constantes, outils et pré-sélection ===
 
 // === 1. CONST & VARIABLES GLOBALES ===
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
@@ -129,8 +129,9 @@ async function getTickerList() {
   debug(`🔄 Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
+// === Bloc 2 : enrichissement IA, affichage et événements ===
 
-// === 5. ENRICHISSEMENT IA ===
+// === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 50 affichés) ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
@@ -186,19 +187,24 @@ async function fetchOpportunities() {
         `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
         `News ${sym}`
       );
-      news = await safeJson(resNews, `News ${sym}`);
+      const rawNews = await safeJson(resNews, `News ${sym}`);
+      debug(`[Raw News ${sym}] ` + JSON.stringify(rawNews));
+      news = rawNews;
       debug(`📥 News.articles.length = ${news?.articles?.length}`);
       await sleep(200);
 
       // RSI
       const resRsi = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
       const rawRsi = await safeJson(resRsi, 'RSI');
+      debug(`[Raw RSI ${sym}] ` + JSON.stringify(rawRsi));
       rsi = rawRsi?.value;
       debug(`📥 RSI.value = ${rsi}`);
       await sleep(200);
+
       // MACD
       const resMacd = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
       const rawMacd = await safeJson(resMacd, 'MACD');
+      debug(`[Raw MACD ${sym}] ` + JSON.stringify(rawMacd));
       macdData = rawMacd;
       debug(`📥 MACD value=${macdData?.valueMACD}, signal=${macdData?.valueMACDSignal}`);
       await sleep(200);
@@ -206,6 +212,7 @@ async function fetchOpportunities() {
       // Events
       const resEvt = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
       const rawEvt = await safeJson(resEvt, 'Events');
+      debug(`[Raw Events ${sym}] ` + JSON.stringify(rawEvt));
       evt = rawEvt;
       debug(`📥 Events.body.length = ${evt?.body?.length}`);
       await sleep(200);
@@ -213,59 +220,52 @@ async function fetchOpportunities() {
       // On-chain
       const resOn  = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
       const rawOn  = await safeJson(resOn, 'Onchain');
+      debug(`[Raw Onchain ${sym}] ` + JSON.stringify(rawOn));
       onch = rawOn;
       debug(`📥 Onchain.data.value = ${onch?.data?.value}`);
-      await sleep(SLEEP_LONG);
-
-      // calcul des boosts
-      const sig    = macdData?.valueMACDSignal || 0;
-      const val    = macdData?.valueMACD       || 0;
-      const boosts = [
-        news?.articles?.length         ? 1.2 : 1,
-        (rsi < 30 && val > sig)        ? 1.2 : 1,
-        (evt?.body?.length > 0)        ? 1.2 : 1,
-        ((onch?.data?.value||0) > 500) ? 1.2 : 1
-      ];
-
-      // forecast 7 jours
-      const rawPct   = t.quotes.USD.percent_change_24h || 0;
-      const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
-
-      // confiance IA
-      const met = boosts.filter(b=>b>1).length;
-      const confidence = (met / boosts.length * 10).toFixed(1);
-
-      // extraire la news
-      const article = news?.articles?.[0];
-      let headline = 'Pas d’actualité';
-      let dateStr  = '';
-      if (article?.title) {
-        headline = article.title;
-        if (article.publishedAt) {
-          dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
-            year: 'numeric', month: '2-digit', day: '2-digit',
-            hour: '2-digit', minute: '2-digit'
-          });
-        }
-      }
-
-      if (forecast >= 0) {
-        enriched.push({
-          name: sym,
-          forecast: forecast.toFixed(1),
-          confidence,
-          headline,
-          dateStr,
-          url: article?.url
-        });
-      }
-
     } catch (err) {
       debug(`❌ Erreur IA fetch pour ${sym}: ${err.message}`);
       continue;
     }
-  } // fin boucle enrich
 
+    // calcul des boosts et forecast
+    const sig    = macdData?.valueMACDSignal || 0;
+    const val    = macdData?.valueMACD       || 0;
+    const boosts = [
+      news?.articles?.length         ? 1.2 : 1,
+      (rsi < 30 && val > sig)        ? 1.2 : 1,
+      (evt?.body?.length > 0)        ? 1.2 : 1,
+      ((onch?.data?.value||0) > 500) ? 1.2 : 1
+    ];
+    const rawPct   = t.quotes.USD.percent_change_24h || 0;
+    const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
+    const met       = boosts.filter(b=>b>1).length;
+    const confidence = (met / boosts.length * 10).toFixed(1);
+
+    const article = news?.articles?.[0];
+    let headline = 'Pas d’actualité', dateStr = '';
+    if (article?.title) {
+      headline = article.title;
+      if (article.publishedAt) {
+        dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit'
+        });
+      }
+    }
+
+    if (forecast >= 0) {
+      enriched.push({
+        name: sym,
+        forecast: forecast.toFixed(1),
+        confidence,
+        headline,
+        dateStr,
+        url: article?.url
+      });
+    }
+    await sleep(SLEEP_LONG);
+  }
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
   // 5.3 – trier et afficher les 50
