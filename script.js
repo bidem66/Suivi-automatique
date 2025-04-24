@@ -48,6 +48,7 @@ async function fetchExchangeRate() {
   const j = await safeJson(res, 'ExchangeRate');
   return j?.rates?.CAD || 1.35;
 }
+
 async function fetchAction(sym) {
   const res = await safeFetch(`${PROXY}finnhub?symbol=${sym}`, 'Finnhub');
   const d   = await safeJson(res, 'Finnhub');
@@ -55,6 +56,7 @@ async function fetchAction(sym) {
   const change = d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0;
   return { price: d.c, change, currency: 'USD' };
 }
+
 async function fetchCrypto(sym, curr) {
   const res = await safeFetch(`${PROXY}binance?symbol=${sym}USDT`, 'Binance');
   const d   = await safeJson(res, 'Binance');
@@ -86,8 +88,10 @@ async function fetchGeckoTickers(perPage = 100, pages = 5) {
   }
   return all;
 }
+
 async function getTickerList() {
   const results = [];
+
   // 4.1 – CoinPaprika (top 1000)
   {
     const res = await safeFetch(`${PROXY}coinpaprika`, 'CoinPaprika');
@@ -99,6 +103,7 @@ async function getTickerList() {
       debug('⚠️ CoinPaprika returned non-array');
     }
   }
+
   // 4.2 – Compléter jusqu’à 1000 avec Gecko
   const need = 1000 - results.length;
   if (need > 0) {
@@ -118,19 +123,21 @@ async function getTickerList() {
       rank: d.market_cap_rank
     }));
     results.push(...fmt);
-    debug(`✅ CoinGecko: ${fmt.length} tickers`);
+    debug(`✅ CoinGecko: ${fmt.length} tickers (pages 1–${pages})`);
   }
+
   debug(`🔄 Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
-// === 5. ENRICHISSEMENT IA & AFFICHAGE (100 candidats → afficher 50) ===
+
+// === 5. ENRICHISSEMENT IA (100 candidats → 50 retenus → 5 affichés) ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
   debug('--- Début fetchOpportunities ---');
 
   // 5.1 – récupérer et filtrer
-  const all      = await getTickerList();
+  const all     = await getTickerList();
   debug(`🔄 Total brut pour préfiltrage : ${all.length}`);
   const filtered = all.filter(t => {
     const u    = t.quotes.USD;
@@ -152,143 +159,173 @@ async function fetchOpportunities() {
   const scored = filtered
     .map(t => ({
       ...t,
-      preScore: (t.quotes.USD.market_cap/maxMC)*0.7 + (t.quotes.USD.volume_24h/maxVol)*0.3
+      preScore: (
+        (t.quotes.USD.market_cap / maxMC) * 0.7 +
+        (t.quotes.USD.volume_24h / maxVol) * 0.3
+      )
     }))
     .sort((a,b) => b.preScore - a.preScore);
   const candidates = scored.slice(0, 100);
-  debug(`🎯 100 meilleurs pré-sélectionnés`);
-
-  // 5.2 – enrichir 100 candidats
+  debug(`🎯 100 meilleurs pré-sélectionnés (score ≥ ${candidates[candidates.length-1]?.preScore.toFixed(3)})`);
+  // 5.2 – enrichir ces 100, jusqu’à 50 retenus
   const enriched = [];
-  for (let i = 0; i < candidates.length; i++) {
+  for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
     const t   = candidates[i];
     const sym = t.symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
 
+    // fetch séquentiel avec pauses
     let news, rsi, macdData, evt, onch;
     try {
-      // 5.2.1 – fenêtre 7 jours
+      // date 7 jours
       const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
 
-      // 5.2.2 – News ciblée
-      const domains = [
-        'news.coinmarketcap.com',
-        'www.cointelegraph.com',
-        'www.coindesk.com'
-      ].join(',');
+      // News principale (avec date + domaines restreints)
       let res = await safeFetch(
         `${PROXY}news?` +
         `q=${encodeURIComponent(t.name)}` +
-        `&domains=${domains}` +
-        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
+        `&pageSize=1&sortBy=publishedAt` +
+        `&from=${fromDate}` +
+        `&domains=cointelegraph.com,coindesk.com,coinmarketcap.com`,
         `News ${sym}`
       );
       news = await safeJson(res, `News ${sym}`);
       await sleep(200);
 
-      // fallback sans from si vide
+      // **Fallback 1** (sans date mais domaines)
       if (!news?.articles?.length) {
-        const res2  = await safeFetch(
+        res  = await safeFetch(
           `${PROXY}news?` +
           `q=${encodeURIComponent(t.name)}` +
-          `&domains=${domains}` +
-          `&pageSize=1&sortBy=publishedAt`,
+          `&pageSize=1&sortBy=publishedAt` +
+          `&domains=cointelegraph.com,coindesk.com,coinmarketcap.com`,
           `News ${sym} fallback`
         );
-        const news2 = await safeJson(res2, `News ${sym} fallback`);
-        if (news2?.articles?.length) news = news2;
+        const nf = await safeJson(res, `News ${sym} fallback`);
+        if (nf?.articles?.length) news = nf;
         await sleep(200);
       }
 
-      // RSI, MACD, Events, On-chain
-      res      = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
-      rsi      = (await safeJson(res, 'RSI'))?.value;     await sleep(200);
+      // **Fallback 2** (sans domaines ni date)
+      if (!news?.articles?.length) {
+        res  = await safeFetch(
+          `${PROXY}news?` +
+          `q=${encodeURIComponent(t.name)}` +
+          `&pageSize=1&sortBy=publishedAt`,
+          `News ${sym} fallback2`
+        );
+        const n2 = await safeJson(res, `News ${sym} fallback2`);
+        if (n2?.articles?.length) news = n2;
+        await sleep(200);
+      }
+
+      // RSI
+      res       = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
+      rsi       = (await safeJson(res, 'RSI'))?.value;
+      await sleep(200);
+
+      // MACD
       res       = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
-      macdData  = await safeJson(res, 'MACD');            await sleep(200);
-      res  = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
-      evt  = await safeJson(res, 'Events');               await sleep(200);
-      res   = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
-      onch  = await safeJson(res, 'Onchain');             await sleep(200);
+      macdData  = await safeJson(res, 'MACD');
+      await sleep(200);
+
+      // Events
+      res       = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
+      evt       = await safeJson(res, 'Events');
+      await sleep(200);
+
+      // On-chain
+      res       = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
+      onch      = await safeJson(res, 'Onchain');
+
     } catch (err) {
       debug(`❌ Erreur IA fetch pour ${sym}: ${err.message}`);
       continue;
     }
 
-    // boosts & forecast
-    const sig     = macdData?.valueMACDSignal || 0;
-    const valM    = macdData?.valueMACD       || 0;
-    const boosts  = [
-      news?.articles?.length ? 1.2 : 1,
-      (rsi < 30 && valM > sig) ? 1.2 : 1,
-      evt?.body?.length > 0    ? 1.2 : 1,
-      (onch?.data?.value||0) > 500 ? 1.2 : 1
+    // calcul des boosts
+    const sig    = macdData?.valueMACDSignal || 0;
+    const val    = macdData?.valueMACD       || 0;
+    const boosts = [
+      news?.articles?.length         ? 1.2 : 1,
+      (rsi < 30 && val > sig)        ? 1.2 : 1,
+      (evt?.body?.length > 0)        ? 1.2 : 1,
+      ((onch?.data?.value||0) > 500) ? 1.2 : 1
     ];
-    const rawPct    = t.quotes.USD.percent_change_24h || 0;
-    const forecast  = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
 
-    // **Confiance IA** = (nombre de boosts>1)/4*10
+    // forecast 7 jours
+    const rawPct   = t.quotes.USD.percent_change_24h || 0;
+    const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
+
+    // **Confiance IA** avec score minimal
     const countBoosts = boosts.filter(b => b > 1).length;
-    const confidence  = ((countBoosts / boosts.length) * 10).toFixed(1);
+    const baseScore   = countBoosts ? 2 : 0;
+    const dynamic     = (countBoosts / boosts.length) * 8;
+    const confidence  = (baseScore + dynamic).toFixed(1);
 
+    // si forecast suffisant, on garde
     if (forecast >= 20) {
-      const article = news?.articles?.[0];
-      let dateStr = '';
-      if (article?.publishedAt) {
-        dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
-          year:'numeric', month:'2-digit', day:'2-digit',
-          hour:'2-digit', minute:'2-digit'
-        });
-      }
+      // date article
+      const art = news?.articles?.[0];
+      const newsDate = art?.publishedAt
+        ? new Date(art.publishedAt).toLocaleDateString('fr-FR', {
+            year:'numeric',month:'2-digit',day:'2-digit',
+            hour:'2-digit',minute:'2-digit'
+          })
+        : '';
       enriched.push({
         name: sym,
         forecast: forecast.toFixed(1),
         confidence,
-        reason: article?.title || 'Pas d’actualité',
-        newsDate: dateStr,
-        newsUrl: article?.url
+        reason: art?.title || 'Pas d’actualité',
+        newsDate,
+        newsUrl: art?.url
       });
     }
+
     await sleep(SLEEP_LONG);
   }
-  debug(`✅ Enrichies : ${enriched.length} (ciblé 100)`);
 
-  // 5.3 – trier et afficher top 50
+  debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
+
+  // 5.3 – trier et afficher top 5
   ul.innerHTML = '';
   enriched
-    .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
-    .slice(0,50)
+    .sort((a,b)=> parseFloat(b.forecast) - parseFloat(a.forecast))
+    .slice(0,5)
     .forEach(e => {
       ul.innerHTML += `
         <li>
           <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
+          <em>${e.reason}</em><br/>
           ${e.newsUrl
-            ? `<a href="${e.newsUrl}" target="_blank">📰 ${e.reason} (${e.newsDate})</a>`
+            ? `<a href="${e.newsUrl}" target="_blank">📰 <small>(${e.newsDate})</small></a>`
             : '<em>Aucune actualité disponible</em>'}
         </li>`;
     });
 }
 
-// === 6. RAFRAÎCHISSEMENT & ÉVÉNEMENTS ===
+// === 6. AFFICHAGE & ÉVÉNEMENTS ===
 async function refreshAll() {
   const tA   = document.getElementById("tableAction"),
         tC   = document.getElementById("tableCrypto"),
-        advice= document.getElementById("adviceList"),
+        adv  = document.getElementById("adviceList"),
         perf = document.getElementById("globalPerf");
-  tA.innerHTML = tC.innerHTML = advice.innerHTML = '';
+  tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
   let inv = 0, val = 0;
 
   for (const a of portfolio) {
-    const info = a.type==='crypto'
+    const info = a.type === 'crypto'
       ? await fetchCrypto(a.sym, a.curr)
       : await fetchAction(a.sym);
     if (!info) continue;
     const v      = info.price * a.qty;
     const gain   = v - a.inv;
     const change = info.change?.toFixed(2) || '0.00';
-    const cls    = gain>=0?'gain':'perte';
-    const sign   = gain>=0?'+':'-';
-    inv+=a.inv; val+=v;
+    const cls    = gain >= 0 ? 'gain' : 'perte';
+    const sign   = gain >= 0 ? '+' : '';
+    inv += a.inv; val += v;
 
     tA.innerHTML += `
       <tr>
@@ -296,25 +333,25 @@ async function refreshAll() {
         <td>${info.price.toFixed(2)}</td><td>${v.toFixed(2)}</td>
         <td class="${cls}">${sign}${change}%</td><td>${info.currency}</td>
       </tr>`;
-    advice.innerHTML += `<li><strong>${a.sym}</strong>: ${
-      gain>=20?'Vendre':gain<=-15?'À risque':'Garder'
+    adv.innerHTML += `<li><strong>${a.sym}</strong>: ${
+      gain >= 20 ? 'Vendre' : gain <= -15 ? 'À risque' : 'Garder'
     }</li>`;
   }
 
-  const totalGain = val-inv;
-  const totalPct  = inv?((totalGain/inv)*100).toFixed(2):0;
+  const totalGain = val - inv;
+  const totalPct  = inv ? ((totalGain / inv) * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color   = totalGain>=0?'green':'red';
+  perf.style.color   = totalGain >= 0 ? 'green' : 'red';
 
   await fetchOpportunities();
 }
 
 window.onload = refreshAll;
-document.getElementById('refreshBtn')?.addEventListener('click', async ()=>{
+document.getElementById('refreshBtn')?.addEventListener('click', async () => {
   document.getElementById('refreshBtn').disabled = true;
   debug('🔄 Rafraîchissement IA lancé');
   await fetchOpportunities();
-  setTimeout(()=>{
+  setTimeout(() => {
     document.getElementById('refreshBtn').disabled = false;
     debug('✅ Bouton réactivé');
   }, BUTTON_COOLDOWN);
