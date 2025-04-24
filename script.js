@@ -1,4 +1,4 @@
-// script.js
+// === script.js – Bloc 1 ===
 
 // === 1. CONST & VARIABLES GLOBALES ===
 const PROXY = 'https://proxi-api-crypto.onrender.com/proxy/';
@@ -8,9 +8,7 @@ const SLEEP_SHORT = 300;
 const SLEEP_LONG  = 500;
 
 // === 2. OUTILS DE FETCH SÉCURISÉ ===
-function sleep(ms) {
-  return new Promise(res => setTimeout(res, ms));
-}
+function sleep(ms) { return new Promise(res => setTimeout(res, ms)); }
 function debug(msg) {
   const el = document.getElementById('debugConsole');
   if (el) el.innerHTML += `${new Date().toLocaleTimeString()} – ${msg}<br>`;
@@ -48,7 +46,6 @@ async function fetchExchangeRate() {
   const j = await safeJson(res, 'ExchangeRate');
   return j?.rates?.CAD || 1.35;
 }
-
 async function fetchAction(sym) {
   const res = await safeFetch(`${PROXY}finnhub?symbol=${sym}`, 'Finnhub');
   const d   = await safeJson(res, 'Finnhub');
@@ -56,7 +53,6 @@ async function fetchAction(sym) {
   const change = d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0;
   return { price: d.c, change, currency: 'USD' };
 }
-
 async function fetchCrypto(sym, curr) {
   const res = await safeFetch(`${PROXY}binance?symbol=${sym}USDT`, 'Binance');
   const d   = await safeJson(res, 'Binance');
@@ -88,10 +84,8 @@ async function fetchGeckoTickers(perPage = 100, pages = 5) {
   }
   return all;
 }
-
 async function getTickerList() {
   const results = [];
-
   // 4.1 – CoinPaprika (top 1000)
   {
     const res = await safeFetch(`${PROXY}coinpaprika`, 'CoinPaprika');
@@ -103,7 +97,6 @@ async function getTickerList() {
       debug('⚠️ CoinPaprika returned non-array');
     }
   }
-
   // 4.2 – Compléter jusqu’à 1000 avec Gecko
   const need = 1000 - results.length;
   if (need > 0) {
@@ -125,10 +118,10 @@ async function getTickerList() {
     results.push(...fmt);
     debug(`✅ CoinGecko: ${fmt.length} tickers (pages 1–${pages})`);
   }
-
   debug(`🔄 Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
+// === script.js – Bloc 2 ===
 
 // === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 50 affichés) ===
 async function fetchOpportunities() {
@@ -137,17 +130,17 @@ async function fetchOpportunities() {
   debug('--- Début fetchOpportunities ---');
 
   // 5.1 – récupérer et filtrer
-  const all     = await getTickerList();
+  const all      = await getTickerList();
   debug(`🔄 Total brut pour préfiltrage : ${all.length}`);
   const filtered = all.filter(t => {
     const u    = t.quotes.USD;
     const born = t.started_at ? new Date(t.started_at).getTime() : 0;
     const oneY = Date.now() - 365*24*60*60*1000;
     const ban  = ['elon','cum','baby','moon','trump'];
-    return u.market_cap   >= 5e6 &&
-           u.volume_24h   >= 1e6 &&
-           born           < oneY &&
-           t.rank          < 500 &&
+    return u.market_cap >= 5e6 &&
+           u.volume_24h >= 1e6 &&
+           born < oneY &&
+           t.rank < 500 &&
            !t.id.includes('testnet') &&
            !ban.some(w => t.name.toLowerCase().includes(w));
   });
@@ -156,8 +149,7 @@ async function fetchOpportunities() {
   // 5.1.1 – scorer et garder les 100 meilleures
   const maxMC  = Math.max(...filtered.map(t => t.quotes.USD.market_cap));
   const maxVol = Math.max(...filtered.map(t => t.quotes.USD.volume_24h));
-  const scored = filtered
-    .map(t => ({
+  const scored = filtered.map(t => ({
       ...t,
       preScore: (
         (t.quotes.USD.market_cap / maxMC) * 0.7 +
@@ -175,105 +167,94 @@ async function fetchOpportunities() {
     const sym = t.symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
 
-    let news, rsi, macdData, evt, onch;
-    try {
-      const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+    // 5.2.1 – variation 24 h en direct
+    const cryptoInfo = await fetchCrypto(sym, 'USD');
+    const pct24      = cryptoInfo?.change || 0;
+    await sleep(100);
 
-      // News la plus récente
-      const resNews = await safeFetch(
-        `${PROXY}news?` +
-        `q=${encodeURIComponent(t.name)}` +
-        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
-        `News ${sym}`
-      );
-      news = await safeJson(resNews, `News ${sym}`);
-      debug(`Raw news ${sym}: ${JSON.stringify(news).slice(0,200)}…`);
-      await sleep(200);
-      // RSI
-      let res = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
-      rsi = (await safeJson(res, 'RSI'))?.value;
-      await sleep(200);
+    // 5.2.2 – News CoinMarketCap
+    const resNews = await safeFetch(`${PROXY}cmc?symbol=${sym}`, 'CMC News');
+    const cmcNews = await safeJson(resNews, 'CMC News');
+    await sleep(200);
 
-      // MACD
-      res       = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
-      macdData  = await safeJson(res, 'MACD');
-      await sleep(200);
+    // 5.2.3 – RSI
+    const resRsi = await safeFetch(`${PROXY}rsi?symbol=${sym}`, 'RSI');
+    const rsi    = (await safeJson(resRsi, 'RSI'))?.value;
+    await sleep(200);
 
-      // Events
-      res  = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
-      evt  = await safeJson(res, 'Events');
-      await sleep(200);
+    // 5.2.4 – MACD
+    const resMacd  = await safeFetch(`${PROXY}macd?symbol=${sym}`, 'MACD');
+    const macdData = await safeJson(resMacd, 'MACD');
+    await sleep(200);
 
-      // On-chain
-      res   = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
-      onch  = await safeJson(res, 'Onchain');
-    } catch (err) {
-      debug(`❌ Erreur IA fetch pour ${sym}: ${err.message}`);
-      continue;
-    }
+    // 5.2.5 – Events
+    const resEvt = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
+    const evt    = await safeJson(resEvt, 'Events');
+    await sleep(200);
 
-    // calcul des boosts
-    const sig    = macdData?.valueMACDSignal || 0;
-    const val    = macdData?.valueMACD       || 0;
-    const boosts = [
-      news?.articles?.length         ? 1.2 : 1,
-      (rsi < 30 && val > sig)        ? 1.2 : 1,
-      (evt?.body?.length > 0)        ? 1.2 : 1,
-      ((onch?.data?.value||0) > 500) ? 1.2 : 1
+    // 5.2.6 – On-chain
+    const resOn = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
+    const onch  = await safeJson(resOn, 'Onchain');
+
+    // 5.2.7 – calcul des boosts (5 signaux)
+    const article  = cmcNews?.data?.[0];
+    const hasNews  = Boolean(article);
+    const boosts   = [
+      hasNews                                          ? 1.2 : 1,
+      (rsi < 30 && macdData?.valueMACD > macdData?.valueMACDSignal) ? 1.2 : 1,
+      (evt?.body?.length > 0)                          ? 1.2 : 1,
+      ((onch?.data?.value || 0) > 500)                 ? 1.2 : 1,
+      Math.abs(pct24) > 2                              ? 1.1 : 1
     ];
+    debug(`🔧 Boosts pour ${sym} : [${boosts.join(', ')}]`);
 
-    // ===> AJOUT : loggez les boosts
-    const activeBoosts = boosts.filter(b => b > 1).length;
-    debug(`Boosts pour ${sym} : [${boosts.join(', ')}] → actifs = ${activeBoosts}`);
+    // 5.2.8 – forecast & confiance IA
+    const forecast   = pct24 * boosts.reduce((a,b) => a * b, 1) * 7;
+    const metCount   = boosts.filter(b => b > 1).length;
+    const confidence = (metCount / boosts.length * 10).toFixed(1);
 
-    // ** nouveau calcul de la confiance IA **
-    const met = boosts.filter(b => b > 1).length;
-    const confidence = (met / boosts.length * 10).toFixed(1);
-
-    // extraire la news
-    const article = news?.articles?.[0];
-    let headline = 'Pas d’actualité';
-    let dateStr  = '';
-    if (article?.title) {
-      headline = article.title;
+    // 5.2.9 – préparer titre & date de l’actu
+    let headline = 'Pas d’actualité', dateStr = '', url = '';
+    if (hasNews) {
+      headline = article.title || '';
+      url      = article.url   || '';
       if (article.publishedAt) {
-        dateStr = new Date(article.publishedAt).toLocaleDateString('fr-FR', {
-          year: 'numeric', month: '2-digit', day: '2-digit',
-          hour: '2-digit', minute: '2-digit'
-        });
+        dateStr = new Date(article.publishedAt)
+                          .toLocaleDateString('fr-FR');
       }
     }
 
-    if (true) {
+    // 5.2.10 – n’afficher que si forecast ≥ 0
+    if (forecast >= 0) {
       enriched.push({
-        name: sym,
-        forecast: ((t.quotes.USD.percent_change_24h || 0) * boosts.reduce((a,b)=>a*b,1) * 7).toFixed(1),
+        name:       sym,
+        forecast:   forecast.toFixed(1),
         confidence,
         headline,
         dateStr,
-        url: article?.url
+        url
       });
     }
 
     await sleep(SLEEP_LONG);
   }
-
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
-  // 5.3 – trier et afficher les 50 meilleurs
+  // 5.3 – tri & affichage des 50 meilleures
   ul.innerHTML = '';
   enriched
-    .sort((a,b)=> parseFloat(b.forecast) - parseFloat(a.forecast))
-    .slice(0,50)
+    .sort((a,b) => parseFloat(b.forecast) - parseFloat(a.forecast))
+    .slice(0, 50)
     .forEach(e => {
       ul.innerHTML += `
         <li>
           <strong>${e.name}</strong>: +${e.forecast}% (7j)<br/>
           Confiance IA: ${e.confidence}/10<br/>
-          <em>${e.headline}${e.dateStr ? ` (${e.dateStr})` : ''}</em><br/>
-          ${e.url
-            ? `<a href="${e.url}" target="_blank">📰 Lire l’actu</a>`
-            : ''}
+          <em>${e.headline}${e.dateStr ? ` (${e.dateStr})` : ''}</em>${
+            e.url
+              ? `<br/><a href="${e.url}" target="_blank">📰 Lire l’actu</a>`
+              : ''
+          }
         </li>`;
     });
 }
