@@ -8,12 +8,13 @@ const SLEEP_LONG = 500;
 
 // === Début auto-test des clés API ===
 console.log(' Vérification des clés API :');
-console.log(' • NEWSAPI_KEY :', process.env.NEWSAPI_KEY ? '[OK]' : '[❌ MISSING]');
-console.log(' • RSI_SECRET_KEY :', process.env.RSI_SECRET_KEY ? '[OK]' : '[❌ MISSING]');
-console.log(' • MACD_SECRET_KEY :', process.env.MACD_SECRET_KEY ? '[OK]' : '[❌ MISSING]');
-console.log(' • EVENTS_API_TOKEN :', process.env.EVENTS_API_TOKEN ? '[OK]' : '[❌ MISSING]');
-console.log(' • ONCHAIN_API_TOKEN :', process.env.ONCHAIN_API_TOKEN ? '[OK]' : '[❌ MISSING]');
-console.log(' • CRYPTOCOMPARE_KEY :', process.env.CRYPTOCOMPARE_KEY ? '[OK]' : '[❌ MISSING]');
+console.log(' • NEWS_API_KEY        :', process.env.NEWS_API_KEY        ? '[OK]' : '[❌ MISSING]');
+console.log(' • EVENTS_API_TOKEN    :', process.env.EVENTS_API_TOKEN    ? '[OK]' : '[❌ MISSING]');
+console.log(' • ONCHAIN_API_TOKEN   :', process.env.ONCHAIN_API_TOKEN   ? '[OK]' : '[❌ MISSING]');
+console.log(' • FINNHUB_KEY         :', process.env.FINNHUB_KEY         ? '[OK]' : '[❌ MISSING]');
+console.log(' • COINMARKETCAL_KEY   :', process.env.COINMARKETCAL_KEY   ? '[OK]' : '[❌ MISSING]');
+console.log(' • TOKEN_TERMINAL_KEY  :', process.env.TOKEN_TERMINAL_KEY  ? '[OK]' : '[❌ MISSING]');
+console.log(' • CRYPTOCOMPARE_KEY   :', process.env.CRYPTOCOMPARE_KEY   ? '[OK]' : '[❌ MISSING]');
 console.log('================================');
 // === Fin auto-test des clés API ===
 
@@ -132,6 +133,7 @@ async function getTickerList() {
   debug(` Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
+
 // === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 50 affichés) ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
@@ -194,25 +196,37 @@ async function fetchOpportunities() {
       await sleep(200);
 
       // === RSI via CryptoCompare ===
-      const urlRsi = `https://min-api.cryptocompare.com/data/technicalindicator` +
-                     `?fsym=${sym}&tsym=USD&indicator=rsi&timePeriod=14` +
-                     `&api_key=${process.env.CRYPTOCOMPARE_KEY}`;
+      const urlRsi =
+        `https://min-api.cryptocompare.com/data/v2/technical_indicator` +
+        `?fsym=${sym}` +
+        `&tsym=USD` +
+        `&type=rsi` +
+        `&timePeriod=14` +
+        `&limit=1` +
+        `&api_key=${process.env.CRYPTOCOMPARE_KEY}`;
       const resRsi = await safeFetch(urlRsi, 'CryptoCompare RSI');
       const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
       debug(`[CryptoCompare RSI ${sym}] ` + JSON.stringify(dataRsi));
-      rsi = dataRsi?.Data?.[dataRsi.Data.length - 1]?.RSI;
+      rsi = dataRsi?.Data?.Data?.[0]?.value;
       debug(` RSI.value = ${rsi}`);
       await sleep(200);
 
       // === MACD via CryptoCompare ===
-      const urlMacd = `https://min-api.cryptocompare.com/data/technicalindicator` +
-                      `?fsym=${sym}&tsym=USD&indicator=macd` +
-                      `&timePeriod=12,26,9&api_key=${process.env.CRYPTOCOMPARE_KEY}`;
+      const urlMacd =
+        `https://min-api.cryptocompare.com/data/v2/technical_indicator` +
+        `?fsym=${sym}` +
+        `&tsym=USD` +
+        `&type=macd` +
+        `&fastPeriod=12` +
+        `&slowPeriod=26` +
+        `&signalPeriod=9` +
+        `&limit=1` +
+        `&api_key=${process.env.CRYPTOCOMPARE_KEY}`;
       const resMacd = await safeFetch(urlMacd, 'CryptoCompare MACD');
       const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
       debug(`[CryptoCompare MACD ${sym}] ` + JSON.stringify(dataMacd));
-      const last = dataMacd?.Data?.[dataMacd.Data.length - 1] || {};
-      macdData = { valueMACD: last.MACD, valueMACDSignal: last.Signal };
+      const point = dataMacd?.Data?.Data?.[0] || {};
+      macdData = { valueMACD: point.MACD, valueMACDSignal: point.Signal };
       debug(` MACD value=${macdData.valueMACD}, signal=${macdData.valueMACDSignal}`);
       await sleep(200);
 
