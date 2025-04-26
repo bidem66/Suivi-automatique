@@ -121,7 +121,7 @@ async function getTickerList() {
   debug(` Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
-// === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 50 affichés) ===
+// === Bloc 2 : enrichissement IA & affichage ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
@@ -132,143 +132,103 @@ async function fetchOpportunities() {
   debug(` Total brut pour préfiltrage : ${all.length}`);
   const filtered = all.filter(t => {
     const u = t.quotes.USD;
-    const born = t.started_at ? new Date(t.started_at).getTime() : 0;
     const oneY = Date.now() - 365*24*60*60*1000;
-    const ban = ['elon','cum','baby','moon','trump'];
     return u.market_cap >= 5e6 &&
            u.volume_24h >= 1e6 &&
-           born < oneY &&
+           (t.started_at ? new Date(t.started_at).getTime() : 0) < oneY &&
            t.rank < 500 &&
            !t.id.includes('testnet') &&
-           !ban.some(w => t.name.toLowerCase().includes(w));
+           !['elon','cum','baby','moon','trump']
+             .some(w => t.name.toLowerCase().includes(w));
   });
   debug(` Après filtres : ${filtered.length}`);
 
   // 5.1.1 – scorer et garder les 100 meilleures
   const maxMC = Math.max(...filtered.map(t => t.quotes.USD.market_cap));
   const maxVol = Math.max(...filtered.map(t => t.quotes.USD.volume_24h));
-  const scored = filtered
+  const candidates = filtered
     .map(t => ({
       ...t,
-      preScore: (
+      preScore:
         (t.quotes.USD.market_cap / maxMC) * 0.7 +
         (t.quotes.USD.volume_24h / maxVol) * 0.3
-      )
     }))
-    .sort((a,b) => b.preScore - a.preScore);
-  const candidates = scored.slice(0, 100);
-  debug(` 100 meilleurs présélectionnés (score ≥ ${candidates[candidates.length-1]?.preScore.toFixed(3)})`);
+    .sort((a,b) => b.preScore - a.preScore)
+    .slice(0,100);
+  debug(` 100 meilleurs présélectionnés (score ≥ ${candidates.at(-1).preScore.toFixed(3)})`);
 
   // 5.2 – enrichir ces 100 candidats
   const enriched = [];
   for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
-    const t = candidates[i];
-    const sym = t.symbol;
+    const sym = candidates[i].symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
 
-    let news, rsi, macdData, evt, onch;
     try {
-      // News
+      // News via proxy
       const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
       const resNews = await safeFetch(
-        `${PROXY}news?` +
-        `q=${encodeURIComponent(t.name)}` +
+        `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}` +
         `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
         `News ${sym}`
       );
-      const rawNews = await safeJson(resNews, `News ${sym}`);
-      debug(`[Raw News ${sym}] ` + JSON.stringify(rawNews));
-      news = rawNews;
-      debug(` News.articles.length = ${news?.articles?.length}`);
-      await sleep(200);
+      const news = await safeJson(resNews, `News ${sym}`);
 
-      // === RSI via CryptoCompare ===
-      const urlRsi =
-        `https://min-api.cryptocompare.com/data/v2/technical_indicator` +
-        `?fsym=${sym}` +
-        `&tsym=USD` +
-        `&type=rsi` +
-        `&timePeriod=14` +
-        `&limit=1` +
-        `&api_key=${process.env.CRYPTOCOMPARE_KEY}`;
-      const resRsi = await safeFetch(urlRsi, 'CryptoCompare RSI');
+      // RSI via proxy
+      const resRsi = await safeFetch(
+        `${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,
+        'CryptoCompare RSI'
+      );
       const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
-      debug(`[CryptoCompare RSI ${sym}] ` + JSON.stringify(dataRsi));
-      rsi = dataRsi?.Data?.Data?.[0]?.value;
-      debug(` RSI.value = ${rsi}`);
-      await sleep(200);
+      const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
 
-      // === MACD via CryptoCompare ===
-      const urlMacd =
-        `https://min-api.cryptocompare.com/data/v2/technical_indicator` +
-        `?fsym=${sym}` +
-        `&tsym=USD` +
-        `&type=macd` +
-        `&fastPeriod=12` +
-        `&slowPeriod=26` +
-        `&signalPeriod=9` +
-        `&limit=1` +
-        `&api_key=${process.env.CRYPTOCOMPARE_KEY}`;
-      const resMacd = await safeFetch(urlMacd, 'CryptoCompare MACD');
+      // MACD via proxy
+      const resMacd = await safeFetch(
+        `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD` +
+        `&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
+        'CryptoCompare MACD'
+      );
       const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
-      debug(`[CryptoCompare MACD ${sym}] ` + JSON.stringify(dataMacd));
       const point = dataMacd?.Data?.Data?.[0] || {};
-      macdData = { valueMACD: point.MACD, valueMACDSignal: point.Signal };
-      debug(` MACD value=${macdData.valueMACD}, signal=${macdData.valueMACDSignal}`);
-      await sleep(200);
+      const macd = point.MACD || 0, signal = point.Signal || 0;
 
-      // Events
-      const resEvt = await safeFetch(`${PROXY}events?coins=${sym}`, 'Events');
-      const rawEvt = await safeJson(resEvt, 'Events');
-      debug(`[Raw Events ${sym}] ` + JSON.stringify(rawEvt));
-      evt = rawEvt;
-      debug(` Events.body.length = ${evt?.body?.length}`);
-      await sleep(200);
+      // Events & Onchain
+      const [ resEvt, resOn ] = await Promise.all([
+        safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
+        safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
+      ]);
+      const evt  = await safeJson(resEvt, 'Events');
+      const onch = await safeJson(resOn, 'Onchain');
 
-      // On-chain
-      const resOn = await safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain');
-      const rawOn = await safeJson(resOn, 'Onchain');
-      debug(`[Raw Onchain ${sym}] ` + JSON.stringify(rawOn));
-      onch = rawOn;
-      debug(` Onchain.data.value = ${onch?.data?.value}`);
+      // calcul des boosts et forecast
+      const boosts = [
+        news?.articles?.length ? 1.2 : 1,
+        (rsi < 30 && macd > signal) ? 1.2 : 1,
+        (evt?.body?.length > 0) ? 1.2 : 1,
+        ((onch?.data?.value||0) > 500) ? 1.2 : 1
+      ];
+      const rawPct = candidates[i].quotes.USD.percent_change_24h || 0;
+      const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
+      const confidence = ((boosts.filter(b=>b>1).length / boosts.length) * 10).toFixed(1);
+
+      // article
+      const article = news?.articles?.[0] || {};
+      const headline = article.title || 'Pas d’actualité';
+      const dateStr  = article.publishedAt
+        ? ` (${new Date(article.publishedAt).toLocaleString('fr-FR')})`
+        : '';
+
+      if (forecast >= 0) {
+        enriched.push({
+          name: sym,
+          forecast: forecast.toFixed(1),
+          confidence,
+          headline,
+          dateStr,
+          url: article.url || ''
+        });
+      }
     } catch (err) {
       debug(`❌ Erreur IA fetch pour ${sym}: ${err.message}`);
-      continue;
-    }
-
-    // calcul des boosts et forecast ...
-    const sig = macdData?.valueMACDSignal || 0;
-    const val = macdData?.valueMACD || 0;
-    const boosts = [
-      news?.articles?.length ? 1.2 : 1,
-      (rsi < 30 && val > sig) ? 1.2 : 1,
-      (evt?.body?.length > 0) ? 1.2 : 1,
-      ((onch?.data?.value||0) > 500) ? 1.2 : 1
-    ];
-    const rawPct = t.quotes.USD.percent_change_24h || 0;
-    const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
-    const met = boosts.filter(b=>b>1).length;
-    const confidence = (met / boosts.length * 10).toFixed(1);
-    const article = news?.articles?.[0];
-    let headline = 'Pas d’actualité', dateStr = '';
-    if (article?.title) {
-      headline = article.title;
-      if (article.publishedAt) {
-        dateStr = new Date(article.publishedAt).toLocaleDateString(
-          'fr-FR',
-          { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }
-        );
-      }
-    }
-    if (forecast >= 0) {
-      enriched.push({
-        name: sym,
-        forecast: forecast.toFixed(1),
-        confidence,
-        headline,
-        dateStr,
-        url: article?.url
-      });
     }
     await sleep(SLEEP_LONG);
   }
@@ -276,17 +236,18 @@ async function fetchOpportunities() {
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
   // 5.3 – trier et afficher les 50
-  ul.innerHTML = '';
+  const list = document.getElementById('opportunities');
+  list.innerHTML = '';
   enriched
     .sort((a,b)=> parseFloat(b.forecast) - parseFloat(a.forecast))
     .slice(0,50)
     .forEach(e => {
-      ul.innerHTML += `
+      list.innerHTML += `
 <li>
   * ${e.name}: +${e.forecast}% (7j)<br>
     Confiance IA: ${e.confidence}/10<br>
-    ${e.headline}${e.dateStr ? ` (${e.dateStr})` : ''}<br>
-    ${e.url ? `` : ''}
+    ${e.headline}${e.dateStr}<br>
+    ${e.url ? `<a href="${e.url}" target="_blank">Lien</a>` : ''}
 </li>`;
     });
 }
@@ -299,6 +260,7 @@ async function refreshAll() {
         perf = document.getElementById("globalPerf");
   tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
   let inv = 0, val = 0;
+
   for (const a of portfolio) {
     const info = a.type === 'crypto'
       ? await fetchCrypto(a.sym, a.curr)
@@ -309,15 +271,11 @@ async function refreshAll() {
     const change = info.change?.toFixed(2) || '0.00';
     const cls    = gain >= 0 ? 'gain' : 'perte';
     const sign   = gain >= 0 ? '+' : '';
-    inv += a.inv;
-    val += v;
+    inv += a.inv; val += v;
     tA.innerHTML += `
 <tr class="${cls}">
-  <td>${a.sym}</td>
-  <td>${a.qty}</td>
-  <td>${a.inv.toFixed(2)}</td>
-  <td>${info.price.toFixed(2)}</td>
-  <td>${v.toFixed(2)}</td>
+  <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
+  <td>${info.price.toFixed(2)}</td><td>${v.toFixed(2)}</td>
   <td>${sign}${change}% ${info.currency}</td>
 </tr>`;
     adv.innerHTML += `
@@ -326,6 +284,7 @@ async function refreshAll() {
       gain <= -15 ? 'À risque' : 'Garder'
     }</li>`;
   }
+
   const totalGain = val - inv;
   const totalPct  = inv ? ((totalGain / inv) * 100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
