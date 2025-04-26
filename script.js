@@ -6,16 +6,16 @@ const BUTTON_COOLDOWN = 60 * 60 * 1000;
 const SLEEP_SHORT = 300;
 const SLEEP_LONG = 500;
 
-// === Début auto-test des clés API ===
-console.log(' Vérification des clés API :');
-console.log(' • NEWS_API_KEY        :', process.env.NEWS_API_KEY        ? '[OK]' : '[❌ MISSING]');
-console.log(' • EVENTS_API_TOKEN    :', process.env.EVENTS_API_TOKEN    ? '[OK]' : '[❌ MISSING]');
-console.log(' • ONCHAIN_API_TOKEN   :', process.env.ONCHAIN_API_TOKEN   ? '[OK]' : '[❌ MISSING]');
-console.log(' • FINNHUB_KEY         :', process.env.FINNHUB_KEY         ? '[OK]' : '[❌ MISSING]');
-console.log(' • COINMARKETCAL_KEY   :', process.env.COINMARKETCAL_KEY   ? '[OK]' : '[❌ MISSING]');
-console.log(' • TOKEN_TERMINAL_KEY  :', process.env.TOKEN_TERMINAL_KEY  ? '[OK]' : '[❌ MISSING]');
-console.log(' • CRYPTOCOMPARE_KEY   :', process.env.CRYPTOCOMPARE_KEY   ? '[OK]' : '[❌ MISSING]');
-console.log('================================');
+// === Début auto-test des clés API (désactivé en front) ===
+// console.log(' Vérification des clés API :');
+// console.log(' • NEWS_API_KEY        :', process.env.NEWS_API_KEY        ? '[OK]' : '[❌ MISSING]');
+// console.log(' • EVENTS_API_TOKEN    :', process.env.EVENTS_API_TOKEN    ? '[OK]' : '[❌ MISSING]');
+// console.log(' • ONCHAIN_API_TOKEN   :', process.env.ONCHAIN_API_TOKEN   ? '[OK]' : '[❌ MISSING]');
+// console.log(' • FINNHUB_KEY         :', process.env.FINNHUB_KEY         ? '[OK]' : '[❌ MISSING]');
+// console.log(' • COINMARKETCAL_KEY   :', process.env.COINMARKETCAL_KEY   ? '[OK]' : '[❌ MISSING]');
+// console.log(' • TOKEN_TERMINAL_KEY  :', process.env.TOKEN_TERMINAL_KEY  ? '[OK]' : '[❌ MISSING]');
+// console.log(' • CRYPTOCOMPARE_KEY   :', process.env.CRYPTOCOMPARE_KEY   ? '[OK]' : '[❌ MISSING]');
+// console.log('================================');
 // === Fin auto-test des clés API ===
 
 // === 2. OUTILS DE FETCH SÉCURISÉ ===
@@ -133,7 +133,6 @@ async function getTickerList() {
   debug(` Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
-
 // === 5. ENRICHISSEMENT IA (100 candidats → 50 enrichis → 50 affichés) ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
