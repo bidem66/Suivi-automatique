@@ -29,7 +29,12 @@ async function safeJson(res, label) {
     return null;
   }
   try {
-    return await res.json();
+    const json = await res.json();
+    if (!json) {
+      debug(`${label} JSON vide`);
+      return null;
+    }
+    return json;
   } catch (err) {
     debug(`${label} JSON parse error: ${err.message}`);
     return null;
@@ -71,15 +76,16 @@ async function fetchGeckoTickers(perPage = 100, pages = 5) {
   const all = [];
   for (let p = 1; p <= pages; p++) {
     const res = await safeFetch(
-      `${PROXY}coingecko?endpoint=coins/markets` +
-      `&vs_currency=usd&order=market_cap_desc` +
-      `&per_page=${perPage}&page=${p}` +
-      `&sparkline=false&price_change_percentage=24h`,
+      `${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${p}&sparkline=false&price_change_percentage=24h`,
       `Gecko page ${p}`
     );
     const arr = await safeJson(res, `Gecko page ${p}`);
-    if (!Array.isArray(arr)) break;
+    if (!Array.isArray(arr)) {
+      debug(`⚠️ CoinGecko page ${p} n'a pas retourné un tableau`);
+      break;
+    }
     all.push(...arr);
+    debug(`✅ CoinGecko page ${p}: ${arr.length} cryptos`);
     await sleep(SLEEP_SHORT);
   }
   return all;
@@ -87,6 +93,8 @@ async function fetchGeckoTickers(perPage = 100, pages = 5) {
 
 async function getTickerList() {
   const results = [];
+
+  // 4.1 – CoinPaprika
   {
     const res = await safeFetch(`${PROXY}coinpaprika`, 'CoinPaprika');
     const d1 = await safeJson(res, 'CoinPaprika');
@@ -94,9 +102,11 @@ async function getTickerList() {
       results.push(...d1.slice(0, 1000));
       debug(`✅ CoinPaprika: ${results.length} tickers`);
     } else {
-      debug('⚠️ CoinPaprika returned non-array');
+      debug('⚠️ CoinPaprika a retourné une erreur ou un mauvais format');
     }
   }
+
+  // 4.2 – Compléter avec CoinGecko si besoin
   const need = 1000 - results.length;
   if (need > 0) {
     const pages = Math.ceil(need / 100);
@@ -104,7 +114,7 @@ async function getTickerList() {
     const slice = geo.slice(0, need);
     const fmt = slice.map(d => ({
       id: d.id,
-      symbol: d.symbol.toUpperCase(),
+      symbol: d.symbol?.toUpperCase() || '',
       name: d.name,
       quotes: {
         USD: {
@@ -117,12 +127,12 @@ async function getTickerList() {
       rank: d.market_cap_rank
     }));
     results.push(...fmt);
-    debug(`✅ CoinGecko: ${fmt.length} tickers (pages 1–${pages})`);
+    debug(`✅ CoinGecko ajouté: ${fmt.length} tickers`);
   }
+
   debug(` Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
-
 // === Bloc 2 : enrichissement IA & affichage ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
@@ -159,56 +169,38 @@ async function fetchOpportunities() {
     }))
     .sort((a,b) => b.preScore - a.preScore)
     .slice(0, 100);
-  debug(` 100 meilleurs présélectionnés (score ≥ ${candidates.at(-1).preScore.toFixed(3)})`);
+
+  debug(` 100 meilleurs présélectionnés (score ≥ ${candidates.at(-1)?.preScore?.toFixed(3)})`);
 
   const enriched = [];
   for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
     const sym = candidates[i].symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
     try {
-      const fromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      const resNews = await safeFetch(
-        `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}&limit=1`,
-        `News ${sym}`
-      );
+      const resNews = await safeFetch(`${PROXY}news?q=${encodeURIComponent(candidates[i].name)}&limit=1`, `News ${sym}`);
       const news = await safeJson(resNews, `News ${sym}`);
-      debug(`📰 News RAW ${sym}: ${JSON.stringify(news)}`);
 
-      const resRsi = await safeFetch(
-        `${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,
-        'CryptoCompare RSI'
-      );
+      const resRsi = await safeFetch(`${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`, 'CryptoCompare RSI');
       const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
       const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
-      debug(`📈 RSI ${sym}: ${rsi}`);
 
-      const resMacd = await safeFetch(
-        `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
-        'CryptoCompare MACD'
-      );
+      const resMacd = await safeFetch(`${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`, 'CryptoCompare MACD');
       const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
       const point = dataMacd?.Data?.Data?.[0] || {};
       const macd = point.MACD || 0, signal = point.Signal || 0;
-      debug(`🔀 MACD ${sym}: MACD=${macd}, Signal=${signal}`);
 
-      let evt = null, onch = null;
       const [resEvt, resOn] = await Promise.all([
         safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
-        ['USDT', 'LINK', 'UNI', 'WBTC', 'AAVE', 'MKR', 'DAI', 'COMP', 'YFI'].includes(sym)
-          ? safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
-          : null
+        safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
       ]);
-      evt  = await safeJson(resEvt, 'Events');
-      if (resOn) onch = await safeJson(resOn, 'Onchain');
-
-      debug(`📅 Events ${sym}: ${JSON.stringify(evt)}`);
-      if (onch) debug(`⛓️ Onchain ${sym}: ${JSON.stringify(onch)}`);
+      const evt  = await safeJson(resEvt, 'Events');
+      const onch = await safeJson(resOn, 'Onchain');
 
       const boosts = [
         news?.articles?.length ? 1.2 : 1,
         (rsi < 30 && macd > signal) ? 1.2 : 1,
         (evt?.body?.length > 0) ? 1.2 : 1,
-        ((onch?.data?.price?.rate||0) > 0) ? 1.2 : 1
+        ((onch?.data?.value||0) > 500) ? 1.2 : 1
       ];
       const rawPct = candidates[i].quotes.USD.percent_change_24h || 0;
       const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
