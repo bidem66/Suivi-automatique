@@ -24,11 +24,15 @@ async function safeFetch(url, label) {
 }
 async function safeJson(res, label) {
   if (!res) return null;
-  if (!res.ok) { debug(`${label} non-OK status: ${res.status}`); return null; }
+  if (!res.ok) {
+    debug(`${label} non-OK status: ${res.status}`);
+    return null;
+  }
   try {
     return await res.json();
   } catch (err) {
-    debug(`${label} JSON parse error: ${err.message}`); return null;
+    debug(`${label} JSON parse error: ${err.message}`);
+    return null;
   }
 }
 
@@ -124,6 +128,10 @@ async function getTickerList() {
 // === Bloc 2 : enrichissement IA & affichage ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
+  if (!ul) {
+    console.warn('Element #opportunities introuvable');
+    return;
+  }
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
   debug('--- Début fetchOpportunities ---');
 
@@ -132,7 +140,7 @@ async function fetchOpportunities() {
   debug(` Total brut pour préfiltrage : ${all.length}`);
   const filtered = all.filter(t => {
     const u = t.quotes.USD;
-    const oneY = Date.now() - 365*24*60*60*1000;
+    const oneY = Date.now() - 365 * 24 * 60 * 60 * 1000;
     return u.market_cap >= 5e6 &&
            u.volume_24h >= 1e6 &&
            (t.started_at ? new Date(t.started_at).getTime() : 0) < oneY &&
@@ -154,7 +162,7 @@ async function fetchOpportunities() {
         (t.quotes.USD.volume_24h / maxVol) * 0.3
     }))
     .sort((a,b) => b.preScore - a.preScore)
-    .slice(0,100);
+    .slice(0, 100);
   debug(` 100 meilleurs présélectionnés (score ≥ ${candidates.at(-1).preScore.toFixed(3)})`);
 
   // 5.2 – enrichir ces 100 candidats
@@ -162,16 +170,16 @@ async function fetchOpportunities() {
   for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
     const sym = candidates[i].symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
-
     try {
       // News via proxy
-      const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+      const fromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const resNews = await safeFetch(
         `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}` +
         `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
         `News ${sym}`
       );
       const news = await safeJson(resNews, `News ${sym}`);
+      debug(`📰 News RAW ${sym}: ${JSON.stringify(news)}`);
 
       // RSI via proxy
       const resRsi = await safeFetch(
@@ -180,6 +188,7 @@ async function fetchOpportunities() {
       );
       const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
       const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
+      debug(`📈 RSI ${sym}: ${rsi}`);
 
       // MACD via proxy
       const resMacd = await safeFetch(
@@ -190,14 +199,17 @@ async function fetchOpportunities() {
       const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
       const point = dataMacd?.Data?.Data?.[0] || {};
       const macd = point.MACD || 0, signal = point.Signal || 0;
+      debug(`🔀 MACD ${sym}: MACD=${macd}, Signal=${signal}`);
 
       // Events & Onchain
-      const [ resEvt, resOn ] = await Promise.all([
+      const [resEvt, resOn] = await Promise.all([
         safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
         safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
       ]);
       const evt  = await safeJson(resEvt, 'Events');
+      debug(`📅 Events ${sym}: ${JSON.stringify(evt)}`);
       const onch = await safeJson(resOn, 'Onchain');
+      debug(`⛓️ Onchain ${sym}: ${JSON.stringify(onch)}`);
 
       // calcul des boosts et forecast
       const boosts = [
@@ -235,50 +247,6 @@ async function fetchOpportunities() {
 
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
-try {
-      // News via proxy
-      const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
-      const resNews = await safeFetch(
-        `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}` +
-        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
-        `News ${sym}`
-      );
-      const news = await safeJson(resNews, `News ${sym}`);
-+     debug(`📰 News RAW ${sym}: ${JSON.stringify(news)}`);
-
-      // RSI via proxy
-      const resRsi = await safeFetch(
-        `${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,
-        'CryptoCompare RSI'
-      );
-      const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
-      const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
-+     debug(`📈 RSI ${sym}: ${rsi}`);
-
-      // MACD via proxy
-      const resMacd = await safeFetch(
-        `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD` +
-        `&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
-        'CryptoCompare MACD'
-      );
-      const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
-      const point = dataMacd?.Data?.Data?.[0] || {};
-      const macd = point.MACD || 0, signal = point.Signal || 0;
-+     debug(`🔀 MACD ${sym}: MACD=${macd}, Signal=${signal}`);
-
-      // Events & Onchain
-      const [ resEvt, resOn ] = await Promise.all([
-        safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
-        safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
-      ]);
-      const evt  = await safeJson(resEvt, 'Events');
-+     debug(`📅 Events ${sym}: ${JSON.stringify(evt)}`);
-      const onch = await safeJson(resOn, 'Onchain');
-+     debug(`⛓️ Onchain ${sym}: ${JSON.stringify(onch)}`);
-
-      // calcul des boosts et forecast …
-      …
-  
   // 5.3 – trier et afficher les 50
   const list = document.getElementById('opportunities');
   list.innerHTML = '';
@@ -302,6 +270,10 @@ async function refreshAll() {
         tC = document.getElementById("tableCrypto"),
         adv = document.getElementById("adviceList"),
         perf = document.getElementById("globalPerf");
+  if (!tA || !tC || !adv || !perf) {
+    console.error('Un des éléments du DOM est introuvable');
+    return;
+  }
   tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
   let inv = 0, val = 0;
 
@@ -340,6 +312,7 @@ async function refreshAll() {
 window.onload = refreshAll;
 document.getElementById('refreshBtn')?.addEventListener('click', async () => {
   const btn = document.getElementById('refreshBtn');
+  if (!btn) return;
   btn.disabled = true;
   debug('🔄 Rafraîchissement IA lancé');
   await fetchOpportunities();
