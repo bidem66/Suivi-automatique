@@ -235,6 +235,50 @@ async function fetchOpportunities() {
 
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
+try {
+      // News via proxy
+      const fromDate = new Date(Date.now() - 7*24*60*60*1000).toISOString();
+      const resNews = await safeFetch(
+        `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}` +
+        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
+        `News ${sym}`
+      );
+      const news = await safeJson(resNews, `News ${sym}`);
++     debug(`📰 News RAW ${sym}: ${JSON.stringify(news)}`);
+
+      // RSI via proxy
+      const resRsi = await safeFetch(
+        `${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,
+        'CryptoCompare RSI'
+      );
+      const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
+      const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
++     debug(`📈 RSI ${sym}: ${rsi}`);
+
+      // MACD via proxy
+      const resMacd = await safeFetch(
+        `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD` +
+        `&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
+        'CryptoCompare MACD'
+      );
+      const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
+      const point = dataMacd?.Data?.Data?.[0] || {};
+      const macd = point.MACD || 0, signal = point.Signal || 0;
++     debug(`🔀 MACD ${sym}: MACD=${macd}, Signal=${signal}`);
+
+      // Events & Onchain
+      const [ resEvt, resOn ] = await Promise.all([
+        safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
+        safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
+      ]);
+      const evt  = await safeJson(resEvt, 'Events');
++     debug(`📅 Events ${sym}: ${JSON.stringify(evt)}`);
+      const onch = await safeJson(resOn, 'Onchain');
++     debug(`⛓️ Onchain ${sym}: ${JSON.stringify(onch)}`);
+
+      // calcul des boosts et forecast …
+      …
+  
   // 5.3 – trier et afficher les 50
   const list = document.getElementById('opportunities');
   list.innerHTML = '';
