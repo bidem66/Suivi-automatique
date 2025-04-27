@@ -83,7 +83,6 @@ async function fetchGeckoTickers(perPage = 100, pages = 5) {
 }
 
 async function getTickerList() {
-  // 4.1 – CoinPaprika (top 1000)
   const results = [];
   {
     const res = await safeFetch(`${PROXY}coinpaprika`, 'CoinPaprika');
@@ -95,7 +94,6 @@ async function getTickerList() {
       debug('⚠️ CoinPaprika returned non-array');
     }
   }
-  // 4.2 – Compléter jusqu’à 1000 avec Gecko
   const need = 1000 - results.length;
   if (need > 0) {
     const pages = Math.ceil(need / 100);
@@ -121,6 +119,7 @@ async function getTickerList() {
   debug(` Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
+
 // === Bloc 2 : enrichissement IA & affichage ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
@@ -172,6 +171,7 @@ async function fetchOpportunities() {
         `News ${sym}`
       );
       const news = await safeJson(resNews, `News ${sym}`);
+      debug(` News.articles.length = ${news?.articles?.length || 0}`);
 
       // RSI via proxy
       const resRsi = await safeFetch(
@@ -180,6 +180,7 @@ async function fetchOpportunities() {
       );
       const dataRsi = await safeJson(resRsi, 'CryptoCompare RSI');
       const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
+      debug(` RSI.value = ${rsi}`);
 
       // MACD via proxy
       const resMacd = await safeFetch(
@@ -190,6 +191,7 @@ async function fetchOpportunities() {
       const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
       const point = dataMacd?.Data?.Data?.[0] || {};
       const macd = point.MACD || 0, signal = point.Signal || 0;
+      debug(` MACD.value = ${macd}, signal = ${signal}`);
 
       // Events & Onchain
       const [ resEvt, resOn ] = await Promise.all([
@@ -198,6 +200,8 @@ async function fetchOpportunities() {
       ]);
       const evt  = await safeJson(resEvt, 'Events');
       const onch = await safeJson(resOn, 'Onchain');
+      debug(` Events.body.length = ${evt?.body?.length || 0}`);
+      debug(` Onchain.data.value = ${onch?.data?.value || 0}`);
 
       // calcul des boosts et forecast
       const boosts = [
