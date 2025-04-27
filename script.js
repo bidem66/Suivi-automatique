@@ -171,11 +171,9 @@ async function fetchOpportunities() {
     const sym = candidates[i].symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
     try {
-      // News via proxy
-      const fromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      // News via proxy (CryptoPanic)
       const resNews = await safeFetch(
-        `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}` +
-        `&pageSize=1&sortBy=publishedAt&from=${fromDate}`,
+        `${PROXY}news?q=${sym}&limit=1`,
         `News ${sym}`
       );
       const news = await safeJson(resNews, `News ${sym}`);
@@ -225,8 +223,8 @@ async function fetchOpportunities() {
       // article
       const article = news?.articles?.[0] || {};
       const headline = article.title || 'Pas d’actualité';
-      const dateStr  = article.publishedAt
-        ? ` (${new Date(article.publishedAt).toLocaleString('fr-FR')})`
+      const dateStr  = article.published_at
+        ? ` (${new Date(article.published_at).toLocaleString('fr-FR')})`
         : '';
 
       if (forecast >= 0) {
