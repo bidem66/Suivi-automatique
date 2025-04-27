@@ -45,6 +45,7 @@ async function fetchExchangeRate() {
   const j = await safeJson(res, 'ExchangeRate');
   return j?.rates?.CAD || 1.35;
 }
+
 async function fetchAction(sym) {
   const res = await safeFetch(`${PROXY}finnhub?symbol=${sym}`, 'Finnhub');
   const d = await safeJson(res, 'Finnhub');
@@ -52,6 +53,7 @@ async function fetchAction(sym) {
   const change = d.pc ? ((d.c - d.pc) / d.pc) * 100 : 0;
   return { price: d.c, change, currency: 'USD' };
 }
+
 async function fetchCrypto(sym, curr) {
   const res = await safeFetch(`${PROXY}binance?symbol=${sym}USDT`, 'Binance');
   const d = await safeJson(res, 'Binance');
@@ -64,7 +66,6 @@ async function fetchCrypto(sym, curr) {
   }
   return { price, change, currency: 'USD' };
 }
-
 // === 4. PRÉ-SÉLECTION (1000 tickers) ===
 async function fetchGeckoTickers(perPage = 100, pages = 5) {
   const all = [];
@@ -83,9 +84,9 @@ async function fetchGeckoTickers(perPage = 100, pages = 5) {
   }
   return all;
 }
+
 async function getTickerList() {
   const results = [];
-  // 4.1 – CoinPaprika (top 1000)
   {
     const res = await safeFetch(`${PROXY}coinpaprika`, 'CoinPaprika');
     const d1 = await safeJson(res, 'CoinPaprika');
@@ -96,7 +97,6 @@ async function getTickerList() {
       debug('⚠️ CoinPaprika returned non-array');
     }
   }
-  // 4.2 – Compléter jusqu’à 1000 avec Gecko
   const need = 1000 - results.length;
   if (need > 0) {
     const pages = Math.ceil(need / 100);
@@ -122,6 +122,7 @@ async function getTickerList() {
   debug(` Total combiné pour préfiltrage: ${results.length}`);
   return results;
 }
+
 // === Bloc 2 : enrichissement IA & affichage ===
 async function fetchOpportunities() {
   const ul = document.getElementById('opportunities');
@@ -132,7 +133,6 @@ async function fetchOpportunities() {
   ul.innerHTML = '<li>Analyse IA des cryptos...</li>';
   debug('--- Début fetchOpportunities ---');
 
-  // 5.1 – récupérer et filtrer
   const all = await getTickerList();
   debug(` Total brut pour préfiltrage : ${all.length}`);
   const filtered = all.filter(t => {
@@ -148,7 +148,6 @@ async function fetchOpportunities() {
   });
   debug(` Après filtres : ${filtered.length}`);
 
-  // 5.1.1 – scorer et garder les 100 meilleures
   const maxMC = Math.max(...filtered.map(t => t.quotes.USD.market_cap));
   const maxVol = Math.max(...filtered.map(t => t.quotes.USD.volume_24h));
   const candidates = filtered
@@ -162,21 +161,19 @@ async function fetchOpportunities() {
     .slice(0, 100);
   debug(` 100 meilleurs présélectionnés (score ≥ ${candidates.at(-1).preScore.toFixed(3)})`);
 
-  // 5.2 – enrichir ces 100 candidats
   const enriched = [];
   for (let i = 0; i < candidates.length && enriched.length < 50; i++) {
     const sym = candidates[i].symbol;
     debug(`▶️ Enrichissement ${i+1}/100 : ${sym}`);
     try {
-      // 5.2.1 – News via CryptoPanic
+      const fromDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const resNews = await safeFetch(
-        `${PROXY}news?q=${sym}&limit=1`,
+        `${PROXY}news?q=${encodeURIComponent(candidates[i].name)}&limit=1`,
         `News ${sym}`
       );
       const news = await safeJson(resNews, `News ${sym}`);
       debug(`📰 News RAW ${sym}: ${JSON.stringify(news)}`);
 
-      // 5.2.2 – RSI via CryptoCompare
       const resRsi = await safeFetch(
         `${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,
         'CryptoCompare RSI'
@@ -185,10 +182,8 @@ async function fetchOpportunities() {
       const rsi = dataRsi?.Data?.Data?.[0]?.value || 0;
       debug(`📈 RSI ${sym}: ${rsi}`);
 
-      // 5.2.3 – MACD via CryptoCompare
       const resMacd = await safeFetch(
-        `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD` +
-        `&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
+        `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
         'CryptoCompare MACD'
       );
       const dataMacd = await safeJson(resMacd, 'CryptoCompare MACD');
@@ -196,36 +191,29 @@ async function fetchOpportunities() {
       const macd = point.MACD || 0, signal = point.Signal || 0;
       debug(`🔀 MACD ${sym}: MACD=${macd}, Signal=${signal}`);
 
-      // 5.2.4 – Events via CoinGecko
-      const resEvt = await safeFetch(
-        `${PROXY}events?coins=${candidates[i].id}`,
-        'Events'
-      );
-      const evtJson = await safeJson(resEvt, 'Events');
-      const hasEvents = Array.isArray(evtJson?.data) && evtJson.data.length > 0;
-      debug(`📅 Events ${sym}: ${JSON.stringify(evtJson)}`);
+      let evt = null, onch = null;
+      const [resEvt, resOn] = await Promise.all([
+        safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
+        ['USDT', 'LINK', 'UNI', 'WBTC', 'AAVE', 'MKR', 'DAI', 'COMP', 'YFI'].includes(sym)
+          ? safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
+          : null
+      ]);
+      evt  = await safeJson(resEvt, 'Events');
+      if (resOn) onch = await safeJson(resOn, 'Onchain');
 
-      // 5.2.5 – On-chain via Ethplorer
-      const resOn = await safeFetch(
-        `${PROXY}onchain?symbol=${sym}`,
-        'Onchain'
-      );
-      const onchJson = await safeJson(resOn, 'Onchain');
-      const onchainValue = onchJson?.data?.price?.rate || 0;
-      debug(`⛓️ Onchain ${sym}: value=${onchainValue}`);
+      debug(`📅 Events ${sym}: ${JSON.stringify(evt)}`);
+      if (onch) debug(`⛓️ Onchain ${sym}: ${JSON.stringify(onch)}`);
 
-      // calcul des boosts et forecast
       const boosts = [
         news?.articles?.length ? 1.2 : 1,
         (rsi < 30 && macd > signal) ? 1.2 : 1,
-        hasEvents ? 1.2 : 1,
-        onchainValue > 0 ? 1.2 : 1
+        (evt?.body?.length > 0) ? 1.2 : 1,
+        ((onch?.data?.price?.rate||0) > 0) ? 1.2 : 1
       ];
       const rawPct = candidates[i].quotes.USD.percent_change_24h || 0;
       const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
       const confidence = ((boosts.filter(b=>b>1).length / boosts.length) * 10).toFixed(1);
 
-      // article
       const article = news?.articles?.[0] || {};
       const headline = article.title || 'Pas d’actualité';
       const dateStr  = article.published_at
@@ -250,7 +238,6 @@ async function fetchOpportunities() {
 
   debug(`✅ Enrichies : ${enriched.length} (ciblé 50)`);
 
-  // 5.3 – trier et afficher les 50
   const list = document.getElementById('opportunities');
   list.innerHTML = '';
   enriched
@@ -266,7 +253,8 @@ async function fetchOpportunities() {
 </li>`;
     });
 }
-// === Bloc 3 : affichage & événements utilisateur ===
+
+// === 6. AFFICHAGE & ÉVÉNEMENTS ===
 async function refreshAll() {
   const tA = document.getElementById("tableAction"),
         tC = document.getElementById("tableCrypto"),
