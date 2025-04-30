@@ -3,6 +3,9 @@
    © 2025 – version full-stack Render
    ============================================================== */
 
+document.getElementById('debugConsole').innerHTML +=
+  '<span style="color:blue">✅ SCRIPT OK</span><br>';
+
 /* == 1. CONFIG GÉNÉRALE ========================================= */
 const API_BASE = 'https://dashboard-ia-backend.onrender.com';   // back Render
 const WS_URL   = API_BASE.replace(/^http/, 'ws') + '/ws/prices';
