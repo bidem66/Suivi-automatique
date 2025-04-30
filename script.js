@@ -25,8 +25,19 @@ if (typeof fetchOpportunities !== 'function'){
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function debug(msg){
   const el = document.getElementById('debugConsole');
-  if (el) el.innerHTML += `${new Date().toLocaleTimeString()} – ${msg}<br>`;
+  if (el){
+    el.innerHTML += `${new Date().toLocaleTimeString()} – ${msg}<br>`;
+    el.scrollTop = el.scrollHeight;          // autoscroll
+  }
 }
+
+/* ⇩⇩⇩  AJOUT : capture automatique de toutes les erreurs JS  ⇩⇩⇩ */
+window.addEventListener('error',
+  e => debug('🛑 JS-ERROR : '+e.message));
+window.addEventListener('unhandledrejection',
+  e => debug('🛑 PROMISE : '+(e.reason?.message||e.reason)));
+/* ⇧⇧⇧  (ne rien retirer – seulement ces 2 lignes ont été ajoutées) */
+
 async function safeFetch(url, label){
   try{
     const res = await fetch(url);
@@ -73,9 +84,11 @@ const live = {};   // ex : { BTC:{p:64500, ts:Date.now(), src:'binance'} }
     }catch{}
   };
 })();
+
 /* == 4. FETCH PRIX & DONNÉES =================================== */
 async function fetchExchangeRate(){
-  const r = await safeFetch('https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
+  const r = await safeFetch(
+    'https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
   const j = await safeJson(r,'FX');
   return j?.rates?.CAD || 1.35;
 }
@@ -104,7 +117,6 @@ async function fetchCrypto(sym, curr){
     const rate = curr==='CAD' ? await fetchExchangeRate() : 1;
     return { price:l.p*rate, change:0, currency:curr, live:true };
   }
-
   const r = await safeFetch(`${PROXY}binance?symbol=${sym}USDT`,'Binance');
   const j = await safeJson(r,'Binance');
   if(!j) return null;
@@ -123,7 +135,8 @@ async function fetchMetal(code='gold'){
 }
 
 async function fetchNews(q='BTC', lim=5){
-  const r = await safeFetch(`${API_BASE}/api/news?q=${q}&limit=${lim}`,'News');
+  const r = await safeFetch(
+    `${API_BASE}/api/news?q=${q}&limit=${lim}`,'News');
   const j = await safeJson(r,'News');
   return j?.results || [];
 }
@@ -180,7 +193,8 @@ const _origSafeJson = safeJson;
 safeJson = async function(res,label){
   const j = await _origSafeJson(res,label);
   if(label.startsWith('News') && j?.results?.length===0 && res?.url?.includes('filter=hot')){
-    const alt = await safeFetch(res.url.replace('filter=hot','filter=trending'), label+'(FB)');
+    const alt = await safeFetch(res.url.replace('filter=hot','filter=trending'),
+                                label+'(FB)');
     return (await _origSafeJson(alt,label+'(FB)')) || j;
   }
   return j;
@@ -198,14 +212,16 @@ async function _fetchOppInner(){
     return u.market_cap>=5e6 && u.volume_24h>=1e6 &&
            (t.started_at ? new Date(t.started_at).getTime():0) < oneY &&
            t.rank < 500 && !t.id.includes('testnet') &&
-           !['elon','cum','baby','moon','trump'].some(w=>t.name.toLowerCase().includes(w));
+           !['elon','cum','baby','moon','trump']
+              .some(w=>t.name.toLowerCase().includes(w));
   });
 
   const maxMC  = Math.max(...filtered.map(t=>t.quotes.USD.market_cap));
   const maxVol = Math.max(...filtered.map(t=>t.quotes.USD.volume_24h));
   const candidates = filtered.map(t=>({
       ...t,
-      preScore:(t.quotes.USD.market_cap/maxMC)*0.7 + (t.quotes.USD.volume_24h/maxVol)*0.3
+      preScore:(t.quotes.USD.market_cap/maxMC)*0.7 +
+               (t.quotes.USD.volume_24h/maxVol)*0.3
     }))
     .sort((a,b)=>b.preScore-a.preScore)
     .slice(0,100);
@@ -242,7 +258,8 @@ async function _fetchOppInner(){
 
       const art = news?.results?.[0] || {};
       const hl  = art.title || 'Pas d’actualité';
-      const dStr = art.published_at ? ` (${new Date(art.published_at).toLocaleString('fr-FR')})` : '';
+      const dStr = art.published_at ?
+                   ` (${new Date(art.published_at).toLocaleString('fr-FR')})` : '';
 
       if(forecast >= 0){
         enriched.push({
@@ -271,16 +288,15 @@ async function _fetchOppInner(){
 }
 fetchOpportunities = _fetchOppInner;
 
-/* == 6-bis. persist, addAsset, removeAsset ====================== */
+/* == 6-bis. persist, addAsset, removeAsset ===================== */
 function persist(){ localStorage.setItem('portfolio', JSON.stringify(portfolio)); }
 
 function addAsset(){
-  const type = document.getElementById('type').value;            // crypto|action
+  const type = document.getElementById('type').value;
   const sym  = document.getElementById('symbol').value.trim().toUpperCase();
   const qty  = +document.getElementById('quantity').value;
   const inv  = +document.getElementById('invested').value;
-  let curr   = document.getElementById('devise').value;          // cad|usd
-  curr = curr.toUpperCase();
+  let curr   = document.getElementById('devise').value.toUpperCase();
 
   if(!sym || qty<=0 || inv<=0){
     alert('Remplis tous les champs'); return;
@@ -301,7 +317,7 @@ function removeAsset(){
   refreshAll();
 }
 
-/* == 7. TABLEAUX & RAFRAÎCHISSEMENT ============================= */
+/* == 7. TABLEAUX & RAFRAÎCHISSEMENT ============================ */
 async function refreshAll(){
   const tA=document.getElementById('tableAction'),
         tC=document.getElementById('tableCrypto'),
@@ -345,14 +361,15 @@ async function refreshAll(){
 }
 window.onload = refreshAll;
 
-/* Bouton “Rafraîchir opportunités IA” --------------------------- */
+/* Bouton « Rafraîchir opportunités IA » ------------------------ */
 document.getElementById('refreshBtn')?.addEventListener('click', async ()=>{
   const btn = document.getElementById('refreshBtn');
   if(!btn) return;
   btn.disabled = true;
   debug('🔄 Rafraîchissement IA lancé');
   await fetchOpportunities();
-  setTimeout(()=>{ btn.disabled = false; debug('✅ Bouton réactivé'); }, BUTTON_COOLDOWN);
+  setTimeout(()=>{ btn.disabled = false; debug('✅ Bouton réactivé'); },
+             BUTTON_COOLDOWN);
 });
 
-/* === FIN DU FICHIER =========================================== */
+/* === FIN DU FICHIER ========================================== */
