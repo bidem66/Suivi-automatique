@@ -16,6 +16,11 @@ const BUTTON_COOLDOWN = 60 * 60 * 1000;   // 1 h
 const SLEEP_SHORT     = 300;              // ms
 const SLEEP_LONG      = 500;
 
+/* == 1-bis. stub pour éviter “fetchOpportunities is not defined” == */
+if (typeof fetchOpportunities !== 'function'){
+  var fetchOpportunities = async () => {};
+}
+
 /* == 2. OUTILS GÉNÉRIQUES ======================================= */
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function debug(msg){
@@ -265,6 +270,37 @@ async function _fetchOppInner(){
     });
 }
 fetchOpportunities = _fetchOppInner;
+
+/* == 6-bis. persist, addAsset, removeAsset ====================== */
+function persist(){ localStorage.setItem('portfolio', JSON.stringify(portfolio)); }
+
+function addAsset(){
+  const type = document.getElementById('type').value;            // crypto|action
+  const sym  = document.getElementById('symbol').value.trim().toUpperCase();
+  const qty  = +document.getElementById('quantity').value;
+  const inv  = +document.getElementById('invested').value;
+  let curr   = document.getElementById('devise').value;          // cad|usd
+  curr = curr.toUpperCase();
+
+  if(!sym || qty<=0 || inv<=0){
+    alert('Remplis tous les champs'); return;
+  }
+  const idx = portfolio.findIndex(a=>a.sym===sym);
+  if(idx>=0) portfolio.splice(idx,1);
+  portfolio.push({ type, sym, qty, inv, curr });
+  persist();
+  refreshAll();
+}
+
+function removeAsset(){
+  const sym = document.getElementById('removeSymbol').value.trim().toUpperCase();
+  const n = portfolio.length;
+  portfolio = portfolio.filter(a=>a.sym!==sym);
+  if(portfolio.length===n) alert('Symbole introuvable');
+  persist();
+  refreshAll();
+}
+
 /* == 7. TABLEAUX & RAFRAÎCHISSEMENT ============================= */
 async function refreshAll(){
   const tA=document.getElementById('tableAction'),
