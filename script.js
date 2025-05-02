@@ -6,8 +6,28 @@
 document.getElementById('debugConsole').innerHTML +=
   '<span style="color:blue">✅ SCRIPT OK</span><br>';
 
+/* == HOOK DEBUG GLOBAL ========================================= */
+(function () {
+  const origLog  = console.log;
+  const origErr  = console.error;
+  function mirror(tag, arr) {
+    try {
+      debug(`${tag} ${arr.map(x =>
+        typeof x === 'object' ? JSON.stringify(x) : x
+      ).join(' ')}`);
+    } catch (_) {/* ignore */}
+  }
+  console.log   = (...a) => { origLog(...a);  mirror('ℹ️', a); };
+  console.error = (...a) => { origErr(...a);  mirror('❌', a); };
+
+  window.addEventListener('error',   ({message, filename, lineno}) =>
+    mirror('🔥 Uncaught', [`${message} @ ${filename.split('/').pop()}:${lineno}`]));
+  window.addEventListener('unhandledrejection', ({reason}) =>
+    mirror('💥 Promise', [reason?.message || reason]));
+})();
+
 /* == 1. CONFIG GÉNÉRALE ========================================= */
-const API_BASE = 'https://dashboard-ia-backend.onrender.com';   // back Render
+const API_BASE = 'https://dashboard-ia-backend.onrender.com';          // back Render
 const WS_URL   = API_BASE.replace(/^http/, 'ws') + '/ws/prices';
 
 const PROXY           = 'https://proxi-api-crypto.onrender.com/proxy/'; // proxy public
@@ -16,8 +36,8 @@ const BUTTON_COOLDOWN = 60 * 60 * 1000;   // 1 h
 const SLEEP_SHORT     = 300;              // ms
 const SLEEP_LONG      = 500;
 
-/* == 1-bis. stub pour éviter “fetchOpportunities is not defined” == */
-if (typeof fetchOpportunities !== 'function'){
+/* == 1-bis. STUB si fetchOpportunities n’existe pas ============= */
+if (typeof fetchOpportunities !== 'function') {
   var fetchOpportunities = async () => {};
 }
 
@@ -27,14 +47,6 @@ function debug(msg){
   const el = document.getElementById('debugConsole');
   if (el) el.innerHTML += `${new Date().toLocaleTimeString()} – ${msg}<br>`;
 }
-
-/* 🆕 LOG GLOBAL DES ERREURS =============================== */
-window.addEventListener('error', e => debug(`❌ JS ERROR : ${e.message}`));
-window.addEventListener('unhandledrejection', e =>
-  debug(`❌ UNHANDLED PROMISE : ${e.reason}`));
-document.addEventListener('DOMContentLoaded', () => debug('🌐 DOM Ready'));
-/* ========================================================= */
-
 async function safeFetch(url, label){
   try{
     const res = await fetch(url);
@@ -60,15 +72,16 @@ async function safeJson(res, label){
     return null;
   }
 }
+
 /* == 3. PRIX TEMPS-RÉEL VIA WEBSOCKET =========================== */
-const live = {};   // ex : { BTC:{p:64500, ts:Date.now(), src:'binance'} }
+const live = {};   // p.ex. { BTC:{p:64500, ts:Date.now(), src:'binance'} }
 
 (() => {
   const ws = new WebSocket(WS_URL);
-  ws.onopen  = () => debug('🔌 WebSocket connecté');
-  ws.onerror = () => debug('⚠️ WebSocket error');
-  ws.onclose = () => debug('❌ WebSocket fermé');
-  ws.onmessage = (e) => {
+  ws.onopen  = ()   => debug('🔌 WebSocket connecté');
+  ws.onerror = ()   => debug('⚠️ WebSocket error');
+  ws.onclose = ()   => debug('❌ WebSocket fermé');
+  ws.onmessage = (e)=>{
     try{
       const d = JSON.parse(e.data);
       if(d.type!=='price') return;
@@ -77,14 +90,13 @@ const live = {};   // ex : { BTC:{p:64500, ts:Date.now(), src:'binance'} }
         `td[data-sym="${d.symbol}"][data-col="price"]`
       );
       if(td) td.textContent = d.price.toFixed(2);
-    }catch{}
+    }catch{/* ignore */}
   };
 })();
 
 /* == 4. FETCH PRIX & DONNÉES =================================== */
 async function fetchExchangeRate(){
-  const r = await safeFetch(
-    'https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
+  const r = await safeFetch('https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
   const j = await safeJson(r,'FX');
   return j?.rates?.CAD || 1.35;
 }
@@ -106,7 +118,6 @@ async function fetchAction(sym){
   };
 }
 
-/* --- fallback REST via proxy Binance si pas de données live ---- */
 async function fetchCrypto(sym, curr){
   const l = live[sym];
   if(l && Date.now()-l.ts < 15_000){
@@ -128,6 +139,7 @@ async function fetchMetal(code='gold'){
   const j = await safeJson(r,'Metal');
   return j?.rates?.USD || null;
 }
+
 async function fetchNews(q='BTC', lim=5){
   const r = await safeFetch(`${API_BASE}/api/news?q=${q}&limit=${lim}`,'News');
   const j = await safeJson(r,'News');
@@ -135,12 +147,13 @@ async function fetchNews(q='BTC', lim=5){
 }
 
 /* == 5. PRÉ-SÉLECTION TICKERS (Paprika / Gecko) ================= */
-async function fetchGeckoTickers(perPage=100,pages=5){
+async function fetchGeckoTickers(perPage=100, pages=5){
   const all=[];
   for(let p=1;p<=pages;p++){
     const r = await safeFetch(
       `${PROXY}coingecko?endpoint=coins/markets&vs_currency=usd&order=market_cap_desc&per_page=${perPage}&page=${p}&sparkline=false&price_change_percentage=24h`,
-      `Gecko page ${p}`);
+      `Gecko page ${p}`
+    );
     const arr = await safeJson(r,`Gecko page ${p}`);
     if(!Array.isArray(arr)){ debug(`⚠️ Gecko p${p} pas tableau`); break; }
     all.push(...arr);
@@ -162,9 +175,7 @@ async function getTickerList(){
       id:d.id,
       symbol:d.symbol?.toUpperCase()||'',
       name:d.name,
-      quotes:{USD:{market_cap:d.market_cap,
-                   volume_24h:d.total_volume,
-                   percent_change_24h:d.price_change_percentage_24h}},
+      quotes:{USD:{market_cap:d.market_cap,volume_24h:d.total_volume,percent_change_24h:d.price_change_percentage_24h}},
       started_at:d.genesis_date,
       rank:d.market_cap_rank
     }));
@@ -172,10 +183,10 @@ async function getTickerList(){
   }
   return results;
 }
-
 /* == 6. ENRICHISSEMENT IA & OPPORTUNITÉS ======================= */
 let isFetchingOpportunities = false;
-const _origFetchOpp = fetchOpportunities;
+
+const _origFetchOpp = fetchOpportunities ?? async ()=>{};
 fetchOpportunities = async function(){
   if(isFetchingOpportunities){ debug('⏳ déjà en cours'); return; }
   isFetchingOpportunities = true;
@@ -186,10 +197,8 @@ fetchOpportunities = async function(){
 const _origSafeJson = safeJson;
 safeJson = async function(res,label){
   const j = await _origSafeJson(res,label);
-  if(label.startsWith('News') && j?.results?.length===0 &&
-     res?.url?.includes('filter=hot')){
-    const alt = await safeFetch(res.url.replace('filter=hot','filter=trending'),
-                                label+'(FB)');
+  if(label.startsWith('News') && j?.results?.length===0 && res?.url?.includes('filter=hot')){
+    const alt = await safeFetch(res.url.replace('filter=hot','filter=trending'), label+'(FB)');
     return (await _origSafeJson(alt,label+'(FB)')) || j;
   }
   return j;
@@ -197,7 +206,7 @@ safeJson = async function(res,label){
 
 async function _fetchOppInner(){
   const ul = document.getElementById('opportunities');
-  if(!ul){ console.warn('#opportunities manquant'); return; }
+  if(!ul){ console.error('#opportunities manquant'); return; }
   ul.innerHTML = '<li>Analyse IA des cryptos…</li>';
   debug('--- Début fetchOpportunities ---');
 
@@ -205,18 +214,16 @@ async function _fetchOppInner(){
   const filtered = all.filter(t=>{
     const u = t.quotes.USD, oneY = Date.now() - 365*24*60*60*1000;
     return u.market_cap>=5e6 && u.volume_24h>=1e6 &&
-      (t.started_at ? new Date(t.started_at).getTime():0) < oneY &&
-      t.rank < 500 && !t.id.includes('testnet') &&
-      !['elon','cum','baby','moon','trump'].some(w=>
-        t.name.toLowerCase().includes(w));
+           (t.started_at ? new Date(t.started_at).getTime():0) < oneY &&
+           t.rank < 500 && !t.id.includes('testnet') &&
+           !['elon','cum','baby','moon','trump'].some(w=>t.name.toLowerCase().includes(w));
   });
 
   const maxMC  = Math.max(...filtered.map(t=>t.quotes.USD.market_cap));
   const maxVol = Math.max(...filtered.map(t=>t.quotes.USD.volume_24h));
   const candidates = filtered.map(t=>({
       ...t,
-      preScore:(t.quotes.USD.market_cap/maxMC)*0.7 +
-               (t.quotes.USD.volume_24h/maxVol)*0.3
+      preScore:(t.quotes.USD.market_cap/maxMC)*0.7 + (t.quotes.USD.volume_24h/maxVol)*0.3
     }))
     .sort((a,b)=>b.preScore-a.preScore)
     .slice(0,100);
@@ -227,19 +234,19 @@ async function _fetchOppInner(){
     debug(`▶️ ${sym} (${i+1}/100)`);
     try{
       const [newsR,rsiR,macdR,evtR,onR] = await Promise.all([
-        safeFetch(`${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1`,`News ${sym}`),
-        safeFetch(`${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,'RSI'),
-        safeFetch(`${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`,'MACD'),
-        safeFetch(`${PROXY}events?coins=${sym}`,'Events'),
-        safeFetch(`${PROXY}onchain?symbol=${sym}`,'Onchain')
+        safeFetch(`${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1`, `News ${sym}`),
+        safeFetch(`${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`, 'RSI'),
+        safeFetch(`${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`, 'MACD'),
+        safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
+        safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
       ]);
       const news = await safeJson(newsR, `News ${sym}`);
       const rsi  = (await safeJson(rsiR,'RSI'))?.Data?.Data?.[0]?.value || 0;
-      const macdD= await safeJson(macdR,'MACD');
-      const macd = macdD?.Data?.Data?.[0]?.MACD   || 0;
-      const signal=macdD?.Data?.Data?.[0]?.Signal || 0;
-      const evt  = await safeJson(evtR,'Events');
-      const on   = await safeJson(onR,'Onchain');
+      const macdData = await safeJson(macdR,'MACD');
+      const macd   = macdData?.Data?.Data?.[0]?.MACD   || 0;
+      const signal = macdData?.Data?.Data?.[0]?.Signal || 0;
+      const evt = await safeJson(evtR,'Events');
+      const on  = await safeJson(onR,'Onchain');
 
       const boosts = [
         news?.results?.length ? 1.2 : 1,
@@ -247,74 +254,73 @@ async function _fetchOppInner(){
         (evt?.body?.length > 0) ? 1.2 : 1,
         ((on?.data?.value || 0) > 500) ? 1.2 : 1
       ];
-      const rawPct = candidates[i].quotes.USD.percent_change_24h || 0;
+      const rawPct  = candidates[i].quotes.USD.percent_change_24h || 0;
       const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
-      const conf = ((boosts.filter(b=>b>1).length/boosts.length)*10)
-                    .toFixed(1);
+      const conf = ((boosts.filter(b=>b>1).length/boosts.length)*10).toFixed(1);
 
-      const art=news?.results?.[0] || {};
-      const hl = art.title || 'Pas d’actualité';
-      const dStr = art.published_at ?
-        ` (${new Date(art.published_at).toLocaleString('fr-FR')})` : '';
+      const art = news?.results?.[0] || {};
+      const hl  = art.title || 'Pas d’actualité';
+      const dStr = art.published_at
+        ? ` (${new Date(art.published_at).toLocaleString('fr-FR')})`
+        : '';
 
       if(forecast >= 0){
-        enriched.push({
-          name:sym, forecast:forecast.toFixed(1),
-          confidence:conf, headline:hl, dateStr:dStr, url:art.url||''
-        });
+        enriched.push({ name:sym, forecast:forecast.toFixed(1), confidence:conf,
+                        headline:hl, dateStr:dStr, url:art.url||'' });
       }
-    }catch(err){ debug(`❌ IA ${sym}: ${err.message}`); }
+    }catch(err){ debug(`❌ IA ${sym} : ${err.message}`); }
     await sleep(SLEEP_LONG);
   }
 
   debug(`✅ Enrichies : ${enriched.length}`);
   ul.innerHTML = '';
-  enriched.sort((a,b)=>+b.forecast-+a.forecast).forEach(e=>{
-    ul.innerHTML += `<li>* ${e.name}: +${e.forecast}% (7j)<br>
-      Confiance IA : ${e.confidence}/10<br>
-      ${e.headline}${e.dateStr}<br>
-      ${e.url ? `<a href="${e.url}" target="_blank">Lien</a>` : ''}</li>`;
-  });
+  enriched
+    .sort((a,b)=> +b.forecast - +a.forecast)
+    .forEach(e=>{
+      ul.innerHTML += `<li>* ${e.name}: +${e.forecast}% (7j)<br>
+        Confiance IA : ${e.confidence}/10<br>
+        ${e.headline}${e.dateStr}<br>
+        ${e.url ? `<a href="${e.url}" target="_blank">Lien</a>` : ''}</li>`;
+    });
 }
 fetchOpportunities = _fetchOppInner;
-/* == 6-bis. persistance et gestion portefeuille ================ */
-function persist(){
-  localStorage.setItem('portfolio', JSON.stringify(portfolio));
-}
+
+/* == 6-bis. persistance & gestion du portefeuille =============== */
+function persist(){ localStorage.setItem('portfolio', JSON.stringify(portfolio)); }
+
 function addAsset(){
-  const type = document.getElementById('type').value;             // crypto|action
+  const type = document.getElementById('type').value;            // crypto|action
   const sym  = document.getElementById('symbol').value.trim().toUpperCase();
   const qty  = +document.getElementById('quantity').value;
   const inv  = +document.getElementById('invested').value;
-  let curr   = document.getElementById('devise').value.toUpperCase();
+  let curr   = document.getElementById('devise').value.toUpperCase(); // CAD|USD
 
-  if(!sym || qty<=0 || inv<=0){
-    alert('Remplis tous les champs'); return;
-  }
+  if(!sym || qty<=0 || inv<=0){ alert('Remplis tous les champs'); return; }
   const idx = portfolio.findIndex(a=>a.sym===sym);
   if(idx>=0) portfolio.splice(idx,1);
   portfolio.push({ type, sym, qty, inv, curr });
-  persist(); refreshAll();
-}
-function removeAsset(){
-  const sym = document.getElementById('removeSymbol')
-               .value.trim().toUpperCase();
-  const n = portfolio.length;
-  portfolio = portfolio.filter(a=>a.sym!==sym);
-  if(portfolio.length===n) alert('Symbole introuvable');
-  persist(); refreshAll();
+  persist();
+  refreshAll();
 }
 
+function removeAsset(){
+  const sym = document.getElementById('removeSymbol').value.trim().toUpperCase();
+  const n   = portfolio.length;
+  portfolio = portfolio.filter(a=>a.sym!==sym);
+  if(portfolio.length===n) alert('Symbole introuvable');
+  persist();
+  refreshAll();
+}
 /* == 7. TABLEAUX & RAFRAÎCHISSEMENT ============================= */
 async function refreshAll(){
-  const tA=document.getElementById('tableAction'),
-        tC=document.getElementById('tableCrypto'),
-        adv=document.getElementById('adviceList'),
-        perf=document.getElementById('globalPerf');
+  const tA  = document.getElementById('tableAction'),
+        tC  = document.getElementById('tableCrypto'),
+        adv = document.getElementById('adviceList'),
+        perf= document.getElementById('globalPerf');
   if(!(tA&&tC&&adv&&perf)){ console.error('DOM missing'); return; }
 
   tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
-  let inv=0,val=0;
+  let inv = 0, val = 0;
 
   for(const a of portfolio){
     const info = a.type==='crypto' ? await fetchCrypto(a.sym,a.curr)
@@ -323,11 +329,11 @@ async function refreshAll(){
 
     const v    = info.price * a.qty;
     const gain = v - a.inv;
-    const cls  = gain>=0 ? 'gain' : 'perte';
-    const sign = gain>=0 ? '+' : '';
+    const cls  = gain >= 0 ? 'gain' : 'perte';
+    const sign = gain >= 0 ? '+' : '';
     const liveTag = info.live ? '⚡' : '';
 
-    inv+=a.inv; val+=v;
+    inv += a.inv; val += v;
 
     const row = `<tr class="${cls}">
       <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
@@ -337,21 +343,21 @@ async function refreshAll(){
     </tr>`;
     (a.type==='crypto' ? tC : tA).innerHTML += row;
 
-    adv.innerHTML += `<li>* ${a.sym}: ${gain>=20?'Vendre':
-                      gain<=-15?'À risque':'Garder'}</li>`;
+    adv.innerHTML += `<li>* ${a.sym}: ${gain>=20?'Vendre':gain<=-15?'À risque':'Garder'}</li>`;
   }
 
   const totalGain = val - inv;
   const totalPct  = inv ? ((totalGain/inv)*100).toFixed(2) : 0;
   perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color = totalGain>=0 ? 'green' : 'red';
+  perf.style.color = totalGain >= 0 ? 'green' : 'red';
 
   await fetchOpportunities();
 }
+
 window.onload = refreshAll;
 
 /* Bouton “Rafraîchir opportunités IA” --------------------------- */
-document.getElementById('refreshBtn')?.addEventListener('click', async()=>{
+document.getElementById('refreshBtn')?.addEventListener('click', async ()=>{
   const btn = document.getElementById('refreshBtn');
   if(!btn) return;
   btn.disabled = true;
