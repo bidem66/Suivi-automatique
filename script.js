@@ -188,7 +188,7 @@ async function getTickerList(){
 
 /* == 6. ENRICHISSEMENT IA & OPPORTUNITÉS ======================= */
 let isFetchingOpportunities = false;
-const _origFetchOpp = fetchOpportunities ?? async ()=>{};
+const _origFetchOpp = typeof fetchOpportunities === 'function' ? fetchOpportunities : async () => {};
 fetchOpportunities = async ()=>{
   if(isFetchingOpportunities){ debug('⏳ déjà en cours'); return; }
   isFetchingOpportunities = true;
