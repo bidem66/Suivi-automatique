@@ -30,7 +30,7 @@ debugConsoleEl.innerHTML += '<span style="color:blue">✅ SCRIPT OK</span><br>';
 })();
 
 /* == 1. CONFIG GÉNÉRALE ========================================= */
-const API_BASE        = 'https://dashboard-ia-backend.onrender.com';          
+const API_BASE        = 'https://dashboard-ia-backend.onrender.com';
 const WS_URL          = API_BASE.replace(/^http/, 'ws') + '/ws/prices';
 const PROXY           = 'https://proxi-api-crypto.onrender.com/proxy/';
 let   portfolio       = JSON.parse(localStorage.getItem('portfolio') || '[]');
@@ -42,6 +42,7 @@ const SLEEP_LONG      = 500;
 if (typeof fetchOpportunities !== 'function') {
   var fetchOpportunities = async () => {};
 }
+
 /* == 2. OUTILS GÉNÉRIQUES ======================================= */
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function debug(msg){
@@ -96,10 +97,7 @@ const live = {};
 
 /* == 4. FETCH PRIX & DONNÉES =================================== */
 async function fetchExchangeRate(){
-  const r = await safeFetch(
-    'https://api.exchangerate.host/latest?base=USD&symbols=CAD',
-    'FX'
-  );
+  const r = await safeFetch('https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
   const j = await safeJson(r,'FX');
   return j?.rates?.CAD || 1.35;
 }
@@ -108,7 +106,7 @@ async function fetchAction(sym){
   if(l && Date.now()-l.ts < 15000)
     return { price:l.p, change:0, currency:'USD', live:true };
 
-  const r = await safeFetch(`${API_BASE}/api/stocks/quote/${sym}`, 'Polygon');
+  const r = await safeFetch(`${API_BASE}/api/stocks/quote/${sym}`,'Polygon');
   const j = await safeJson(r,'Polygon');
   const p = j?.results?.[0];
   if(!p) return null;
@@ -128,6 +126,7 @@ async function fetchCrypto(sym, curr){
   const r = await safeFetch(`${PROXY}binance?symbol=${sym}USDT`,'Binance');
   const j = await safeJson(r,'Binance');
   if(!j) return null;
+
   const price  = +j.lastPrice;
   const change = +j.priceChangePercent;
   const rate   = curr==='CAD' ? await fetchExchangeRate() : 1;
@@ -139,10 +138,7 @@ async function fetchMetal(code='gold'){
   return j?.rates?.USD || null;
 }
 async function fetchNews(q='BTC', lim=5){
-  const r = await safeFetch(
-    `${API_BASE}/api/news?q=${q}&limit=${lim}`,
-    'News'
-  );
+  const r = await safeFetch(`${API_BASE}/api/news?q=${q}&limit=${lim}`,'News');
   const j = await safeJson(r,'News');
   return j?.results || [];
 }
@@ -169,6 +165,7 @@ async function getTickerList(){
   const r = await safeFetch(`${PROXY}coinpaprika`,'Paprika');
   const d = await safeJson(r,'Paprika');
   if(Array.isArray(d)) results.push(...d.slice(0,1000));
+
   const need = 1000 - results.length;
   if(need>0){
     const geo   = await fetchGeckoTickers(100, Math.ceil(need/100));
@@ -177,12 +174,12 @@ async function getTickerList(){
       symbol: d.symbol?.toUpperCase()||'',
       name: d.name,
       quotes:{ USD:{
-        market_cap: d.market_cap,
-        volume_24h: d.total_volume,
-        percent_change_24h: d.price_change_percentage_24h
+        market_cap:       d.market_cap,
+        volume_24h:       d.total_volume,
+        percent_change_24h:d.price_change_percentage_24h
       }},
       started_at: d.genesis_date,
-      rank: d.market_cap_rank
+      rank:       d.market_cap_rank
     }));
     results.push(...slice);
   }
@@ -235,7 +232,8 @@ async function _fetchOppInner(){
   const maxVol = Math.max(...filtered.map(t=>t.quotes.USD.volume_24h));
   const candidates = filtered
     .map(t=>({...t,
-      preScore:(t.quotes.USD.market_cap/maxMC)*0.7 + (t.quotes.USD.volume_24h/maxVol)*0.3
+      preScore:(t.quotes.USD.market_cap/maxMC)*0.7
+               + (t.quotes.USD.volume_24h/maxVol)*0.3
     }))
     .sort((a,b)=>b.preScore-a.preScore)
     .slice(0,100);
@@ -250,14 +248,8 @@ async function _fetchOppInner(){
           `${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1`,
           `News ${sym}`
         ),
-        safeFetch(
-          `${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`,
-          'RSI'
-        ),
-        safeFetch(
-          `${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`,
-          'MACD'
-        ),
+        safeFetch(`${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`, 'RSI'),
+        safeFetch(`${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`, 'MACD'),
         safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
         safeFetch(`${PROXY}onchain?symbol=${sym}`, 'Onchain')
       ]);
@@ -280,21 +272,15 @@ async function _fetchOppInner(){
       const forecast = rawPct * boosts.reduce((a,b)=>a*b,1) * 7;
       const conf     = ((boosts.filter(b=>b>1).length/boosts.length)*10).toFixed(1);
 
-      const art      = news?.results?.[0] || {};
-      const hl       = art.title || 'Pas d’actualité';
-      const dStr     = art.published_at
+      const art  = news?.results?.[0] || {};
+      const hl   = art.title || 'Pas d’actualité';
+      const dStr = art.published_at
         ? ` (${new Date(art.published_at).toLocaleString('fr-FR')})`
         : '';
 
-      if(forecast>=0) {
-        enriched.push({
-          name: sym,
-          forecast: forecast.toFixed(1),
-          confidence: conf,
-          headline: hl,
-          dateStr: dStr,
-          url: art.url||''
-        });
+      if(forecast>=0){
+        enriched.push({ name:sym, forecast:forecast.toFixed(1), confidence:conf,
+                        headline:hl, dateStr:dStr, url:art.url||'' });
       }
     }catch(err){
       debug(`❌ IA ${sym} : ${err.message}`);
@@ -372,9 +358,7 @@ async function refreshAll(){
       <td>${sign}${info.change.toFixed(2)}% ${liveTag} ${info.currency}</td>
     </tr>`;
     (a.type==='crypto'? tC:tA).innerHTML += row;
-    adv.innerHTML += `<li>* ${a.sym}: ${
-      gain>=20?'Vendre':gain<=-15?'À risque':'Garder'
-    }</li>`;
+    adv.innerHTML += `<li>* ${a.sym}: ${gain>=20?'Vendre':gain<=-15?'À risque':'Garder'}</li>`;
   }
   const totalGain = val - inv;
   const totalPct  = inv?((totalGain/inv)*100).toFixed(2):0;
