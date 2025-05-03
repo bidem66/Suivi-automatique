@@ -6,7 +6,6 @@ if (!debugConsoleEl) {
   debugConsoleEl.id = 'debugConsole';
   document.body.insertBefore(debugConsoleEl, document.body.firstChild);
 }
-// Indication que le script est chargé
 debugConsoleEl.innerHTML += '<span style="color:blue">✅ SCRIPT OK</span><br>';
 
 /* == HOOK DEBUG GLOBAL ========================================= */
@@ -34,8 +33,8 @@ const API_BASE        = 'https://dashboard-ia-backend.onrender.com';
 const WS_URL          = API_BASE.replace(/^http/, 'ws') + '/ws/prices';
 const PROXY           = 'https://proxi-api-crypto.onrender.com/proxy/';
 let   portfolio       = JSON.parse(localStorage.getItem('portfolio') || '[]');
-const BUTTON_COOLDOWN = 60 * 60 * 1000;   // 1 h
-const SLEEP_SHORT     = 300;              // ms
+const BUTTON_COOLDOWN = 60 * 60 * 1000;
+const SLEEP_SHORT     = 300;
 const SLEEP_LONG      = 500;
 
 /* == 1-bis. STUB si fetchOpportunities n’existe pas ============= */
@@ -94,7 +93,6 @@ const live = {};
     }catch{/* ignore */}
   };
 })();
-
 /* == 4. FETCH PRIX & DONNÉES =================================== */
 async function fetchExchangeRate(){
   const r = await safeFetch('https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
@@ -142,6 +140,7 @@ async function fetchNews(q='BTC', lim=5){
   const j = await safeJson(r,'News');
   return j?.results || [];
 }
+
 /* == 5. PRÉ-SÉLECTION TICKERS (Paprika / Gecko) ================= */
 async function fetchGeckoTickers(perPage=100, pages=5){
   const all = [];
@@ -181,35 +180,7 @@ async function getTickerList(){
       started_at: d.genesis_date,
       rank:       d.market_cap_rank
     }));
-    results.push(...slice);
-  }
-  return results;
-}
-
-/* == 6. ENRICHISSEMENT IA & OPPORTUNITÉS ======================= */
-let isFetchingOpportunities = false;
-const _origFetchOpp = typeof fetchOpportunities === 'function' ? fetchOpportunities : async () => {};
-fetchOpportunities = async ()=>{
-  if(isFetchingOpportunities){ debug('⏳ déjà en cours'); return; }
-  isFetchingOpportunities = true;
-  try{ await _origFetchOpp(); }
-  finally{ isFetchingOpportunities = false; }
-};
-
-const _origSafeJson = safeJson;
-safeJson = async (res,label)=>{
-  const j = await _origSafeJson(res,label);
-  if(label.startsWith('News') && j?.results?.length===0 && res?.url?.includes('filter=hot')){
-    const alt = await safeFetch(
-      res.url.replace('filter=hot','filter=trending'),
-      label+'(FB)'
-    );
-    return (await _origSafeJson(alt,label+'(FB)')) || j;
-  }
-  return j;
-};
-
-async function _fetchOppInner(){
+    results.push(...slice);async function _fetchOppInner(){
   const ul = document.getElementById('opportunities');
   if(!ul){ console.warn('#opportunities manquant'); return; }
   ul.innerHTML = '<li>Analyse IA des cryptos…</li>';
@@ -244,10 +215,7 @@ async function _fetchOppInner(){
     debug(`▶️ ${sym} (${i+1}/100)`);
     try{
       const [newsR, rsiR, macdR, evtR, onR] = await Promise.all([
-        safeFetch(
-          `${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1`,
-          `News ${sym}`
-        ),
+        safeFetch(`${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1`, `News ${sym}`),
         safeFetch(`${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`, 'RSI'),
         safeFetch(`${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`, 'MACD'),
         safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
@@ -303,7 +271,6 @@ async function _fetchOppInner(){
 </li>`;
     });
 }
-// Remplace fetchOpportunities par la version interne
 fetchOpportunities = _fetchOppInner;
 
 /* == 7. PERSIST & GESTION PORTFOLIO =========================== */
@@ -380,3 +347,31 @@ document.getElementById('refreshBtn')?.addEventListener('click', async ()=>{
     debug('✅ Bouton réactivé');
   }, BUTTON_COOLDOWN);
 });
+
+  }
+  return results;
+}
+
+/* == 6. ENRICHISSEMENT IA & OPPORTUNITÉS ======================= */
+let isFetchingOpportunities = false;
+const _origFetchOpp = typeof fetchOpportunities === 'function' ? fetchOpportunities : async () => {};
+fetchOpportunities = async ()=>{
+  if(isFetchingOpportunities){ debug('⏳ déjà en cours'); return; }
+  isFetchingOpportunities = true;
+  try{ await _origFetchOpp(); }
+  finally{ isFetchingOpportunities = false; }
+};
+
+// ✅ Correctif : fallback auto vers "trending" si "hot" vide (évite erreur 400)
+const _origSafeJson = safeJson;
+safeJson = async (res,label)=>{
+  const j = await _origSafeJson(res,label);
+  if(label.startsWith('News') && j?.results?.length === 0 && res?.url?.includes('filter=hot')){
+    const alt = await safeFetch(
+      res.url.replace('filter=hot','filter=trending'),
+      label+'(fallback)'
+    );
+    return (await _origSafeJson(alt,label+'(fallback)')) || j;
+  }
+  return j;
+};
