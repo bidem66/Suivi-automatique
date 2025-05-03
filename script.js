@@ -1,5 +1,4 @@
 // === Bloc 1 : Initialisation et configuration générale ===
-// Crée dynamiquement l'élément debugConsole s'il n'existe pas
 let debugConsoleEl = document.getElementById('debugConsole');
 if (!debugConsoleEl) {
   debugConsoleEl = document.createElement('div');
@@ -8,7 +7,6 @@ if (!debugConsoleEl) {
 }
 debugConsoleEl.innerHTML += '<span style="color:blue">✅ SCRIPT OK</span><br>';
 
-/* == HOOK DEBUG GLOBAL ========================================= */
 (function () {
   const origLog  = console.log;
   const origErr  = console.error;
@@ -28,7 +26,6 @@ debugConsoleEl.innerHTML += '<span style="color:blue">✅ SCRIPT OK</span><br>';
     mirror('💥 Promise', [reason?.message || reason]));
 })();
 
-/* == 1. CONFIG GÉNÉRALE ========================================= */
 const API_BASE        = 'https://dashboard-ia-backend.onrender.com';
 const WS_URL          = API_BASE.replace(/^http/, 'ws') + '/ws/prices';
 const PROXY           = 'https://proxi-api-crypto.onrender.com/proxy/';
@@ -37,12 +34,10 @@ const BUTTON_COOLDOWN = 60 * 60 * 1000;
 const SLEEP_SHORT     = 300;
 const SLEEP_LONG      = 500;
 
-/* == 1-bis. STUB si fetchOpportunities n’existe pas ============= */
 if (typeof fetchOpportunities !== 'function') {
   var fetchOpportunities = async () => {};
 }
 
-/* == 2. OUTILS GÉNÉRIQUES ======================================= */
 function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
 function debug(msg){
   const el = document.getElementById('debugConsole');
@@ -73,8 +68,7 @@ async function safeJson(res, label){
     return null;
   }
 }
-
-/* == 3. PRIX TEMPS-RÉEL VIA WEBSOCKET =========================== */
+// === Bloc 2 : Données live, API prix, tickers et fallback ===
 const live = {};
 (() => {
   const ws = new WebSocket(WS_URL);
@@ -93,7 +87,7 @@ const live = {};
     }catch{/* ignore */}
   };
 })();
-/* == 4. FETCH PRIX & DONNÉES =================================== */
+
 async function fetchExchangeRate(){
   const r = await safeFetch('https://api.exchangerate.host/latest?base=USD&symbols=CAD','FX');
   const j = await safeJson(r,'FX');
@@ -136,12 +130,15 @@ async function fetchMetal(code='gold'){
   return j?.rates?.USD || null;
 }
 async function fetchNews(q='BTC', lim=5){
-  const r = await safeFetch(`${API_BASE}/api/news?q=${q}&limit=${lim}`,'News');
+  const r = await safeFetch(`${API_BASE}/api/news?q=${q}&limit=${lim}&filter=hot`,'News');
   const j = await safeJson(r,'News');
+  if (j?.results?.length === 0) {
+    const alt = await safeFetch(`${API_BASE}/api/news?q=${q}&limit=${lim}&filter=trending`,'News-FB');
+    const altJson = await safeJson(alt,'News-FB');
+    return altJson?.results || [];
+  }
   return j?.results || [];
 }
-
-/* == 5. PRÉ-SÉLECTION TICKERS (Paprika / Gecko) ================= */
 async function fetchGeckoTickers(perPage=100, pages=5){
   const all = [];
   for(let p=1; p<=pages; p++){
@@ -180,7 +177,75 @@ async function getTickerList(){
       started_at: d.genesis_date,
       rank:       d.market_cap_rank
     }));
-    results.push(...slice);async function _fetchOppInner(){
+    results.push(...slice);
+  }
+  return results;
+}
+// === Bloc 3 : Opportunités IA, gestion du portefeuille, affichage final ===
+function persist(){ localStorage.setItem('portfolio', JSON.stringify(portfolio)); }
+
+function addAsset(){
+  const type = document.getElementById('type').value;
+  const sym  = document.getElementById('symbol').value.trim().toUpperCase();
+  const qty  = +document.getElementById('quantity').value;
+  const inv  = +document.getElementById('invested').value;
+  let curr   = document.getElementById('devise').value.toUpperCase();
+  if(!sym||qty<=0||inv<=0){ alert('Remplis tous les champs'); return; }
+  const idx = portfolio.findIndex(a=>a.sym===sym);
+  if(idx>=0) portfolio.splice(idx,1);
+  portfolio.push({ type, sym, qty, inv, curr });
+  persist();
+  refreshAll();
+}
+
+function removeAsset(){
+  const sym = document.getElementById('removeSymbol').value.trim().toUpperCase();
+  const n   = portfolio.length;
+  portfolio = portfolio.filter(a=>a.sym!==sym);
+  if(portfolio.length===n) alert('Symbole introuvable');
+  persist();
+  refreshAll();
+}
+
+async function refreshAll(){
+  const tA   = document.getElementById('tableAction'),
+        tC   = document.getElementById('tableCrypto'),
+        adv  = document.getElementById('adviceList'),
+        perf = document.getElementById('globalPerf');
+  if(!(tA&&tC&&adv&&perf)){ console.error('DOM missing'); return; }
+
+  tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
+  let inv=0, val=0;
+  for(const a of portfolio){
+    const info = a.type==='crypto'
+      ? await fetchCrypto(a.sym,a.curr)
+      : await fetchAction(a.sym);
+    if(!info) continue;
+    const v    = info.price * a.qty;
+    const gain = v - a.inv;
+    const cls  = gain>=0 ? 'gain' : 'perte';
+    const sign = gain>=0 ? '+' : '';
+    const liveTag = info.live ? '⚡' : '';
+    inv += a.inv; val += v;
+    const row = `<tr class="${cls}">
+      <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
+      <td data-sym="${a.sym}" data-col="price">${info.price.toFixed(2)}</td>
+      <td>${v.toFixed(2)}</td>
+      <td>${sign}${info.change.toFixed(2)}% ${liveTag}</td>
+      <td>${info.currency}</td>
+    </tr>`;
+    (a.type==='crypto'? tC:tA).innerHTML += row;
+    adv.innerHTML += `<li>* ${a.sym}: ${gain>=20?'Vendre':gain<=-15?'À risque':'Garder'}</li>`;
+  }
+  const totalGain = val - inv;
+  const totalPct  = inv?((totalGain/inv)*100).toFixed(2):0;
+  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
+  perf.style.color = totalGain>=0? 'green':'red';
+
+  await fetchOpportunities();
+}
+
+async function fetchOpportunities(){
   const ul = document.getElementById('opportunities');
   if(!ul){ console.warn('#opportunities manquant'); return; }
   ul.innerHTML = '<li>Analyse IA des cryptos…</li>';
@@ -215,7 +280,7 @@ async function getTickerList(){
     debug(`▶️ ${sym} (${i+1}/100)`);
     try{
       const [newsR, rsiR, macdR, evtR, onR] = await Promise.all([
-        safeFetch(`${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1`, `News ${sym}`),
+        safeFetch(`${API_BASE}/api/news?q=${encodeURIComponent(candidates[i].name)}&limit=1&filter=hot`, `News ${sym}`),
         safeFetch(`${PROXY}cryptocompare/rsi?fsym=${sym}&tsym=USD&timePeriod=14`, 'RSI'),
         safeFetch(`${PROXY}cryptocompare/macd?fsym=${sym}&tsym=USD&fastPeriod=12&slowPeriod=26&signalPeriod=9`, 'MACD'),
         safeFetch(`${PROXY}events?coins=${sym}`, 'Events'),
@@ -271,69 +336,6 @@ async function getTickerList(){
 </li>`;
     });
 }
-fetchOpportunities = _fetchOppInner;
-
-/* == 7. PERSIST & GESTION PORTFOLIO =========================== */
-function persist(){ localStorage.setItem('portfolio', JSON.stringify(portfolio)); }
-function addAsset(){
-  const type = document.getElementById('type').value;
-  const sym  = document.getElementById('symbol').value.trim().toUpperCase();
-  const qty  = +document.getElementById('quantity').value;
-  const inv  = +document.getElementById('invested').value;
-  let curr   = document.getElementById('devise').value.toUpperCase();
-  if(!sym||qty<=0||inv<=0){ alert('Remplis tous les champs'); return; }
-  const idx = portfolio.findIndex(a=>a.sym===sym);
-  if(idx>=0) portfolio.splice(idx,1);
-  portfolio.push({ type, sym, qty, inv, curr });
-  persist();
-  refreshAll();
-}
-function removeAsset(){
-  const sym = document.getElementById('removeSymbol').value.trim().toUpperCase();
-  const n   = portfolio.length;
-  portfolio = portfolio.filter(a=>a.sym!==sym);
-  if(portfolio.length===n) alert('Symbole introuvable');
-  persist();
-  refreshAll();
-}
-
-/* == 8. TABLEAUX & RAFRAÎCHISSEMENT =========================== */
-async function refreshAll(){
-  const tA   = document.getElementById('tableAction'),
-        tC   = document.getElementById('tableCrypto'),
-        adv  = document.getElementById('adviceList'),
-        perf = document.getElementById('globalPerf');
-  if(!(tA&&tC&&adv&&perf)){ console.error('DOM missing'); return; }
-
-  tA.innerHTML = tC.innerHTML = adv.innerHTML = '';
-  let inv=0, val=0;
-  for(const a of portfolio){
-    const info = a.type==='crypto'
-      ? await fetchCrypto(a.sym,a.curr)
-      : await fetchAction(a.sym);
-    if(!info) continue;
-    const v    = info.price * a.qty;
-    const gain = v - a.inv;
-    const cls  = gain>=0 ? 'gain' : 'perte';
-    const sign = gain>=0 ? '+' : '';
-    const liveTag = info.live ? '⚡' : '';
-    inv += a.inv; val += v;
-    const row = `<tr class="${cls}">
-      <td>${a.sym}</td><td>${a.qty}</td><td>${a.inv.toFixed(2)}</td>
-      <td data-sym="${a.sym}" data-col="price">${info.price.toFixed(2)}</td>
-      <td>${v.toFixed(2)}</td>
-      <td>${sign}${info.change.toFixed(2)}% ${liveTag} ${info.currency}</td>
-    </tr>`;
-    (a.type==='crypto'? tC:tA).innerHTML += row;
-    adv.innerHTML += `<li>* ${a.sym}: ${gain>=20?'Vendre':gain<=-15?'À risque':'Garder'}</li>`;
-  }
-  const totalGain = val - inv;
-  const totalPct  = inv?((totalGain/inv)*100).toFixed(2):0;
-  perf.textContent = `Performance globale : ${totalGain.toFixed(2)} CAD (${totalPct}%)`;
-  perf.style.color = totalGain>=0? 'green':'red';
-
-  await fetchOpportunities();
-}
 
 window.onload = refreshAll;
 document.getElementById('refreshBtn')?.addEventListener('click', async ()=>{
@@ -347,31 +349,3 @@ document.getElementById('refreshBtn')?.addEventListener('click', async ()=>{
     debug('✅ Bouton réactivé');
   }, BUTTON_COOLDOWN);
 });
-
-  }
-  return results;
-}
-
-/* == 6. ENRICHISSEMENT IA & OPPORTUNITÉS ======================= */
-let isFetchingOpportunities = false;
-const _origFetchOpp = typeof fetchOpportunities === 'function' ? fetchOpportunities : async () => {};
-fetchOpportunities = async ()=>{
-  if(isFetchingOpportunities){ debug('⏳ déjà en cours'); return; }
-  isFetchingOpportunities = true;
-  try{ await _origFetchOpp(); }
-  finally{ isFetchingOpportunities = false; }
-};
-
-// ✅ Correctif : fallback auto vers "trending" si "hot" vide (évite erreur 400)
-const _origSafeJson = safeJson;
-safeJson = async (res,label)=>{
-  const j = await _origSafeJson(res,label);
-  if(label.startsWith('News') && j?.results?.length === 0 && res?.url?.includes('filter=hot')){
-    const alt = await safeFetch(
-      res.url.replace('filter=hot','filter=trending'),
-      label+'(fallback)'
-    );
-    return (await _origSafeJson(alt,label+'(fallback)')) || j;
-  }
-  return j;
-};
