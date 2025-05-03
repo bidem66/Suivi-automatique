@@ -245,7 +245,13 @@ async function fetchOpportunities() {
       const signal = macdData?.Data?.Data?.[0]?.Signal || 0;
       const evt = await safeJson(evtR, 'Events');
       const onchain = await safeJson(onR, 'Onchain');
-
+      
+debug(`🔍 ${sym} – NEWS: ${JSON.stringify(news)}`);
+debug(`🔍 ${sym} – RSI: ${JSON.stringify(rsiData)}`);
+debug(`🔍 ${sym} – MACD: ${JSON.stringify(macdData)}`);
+debug(`🔍 ${sym} – EVENTS: ${JSON.stringify(evt)}`);
+debug(`🔍 ${sym} – ONCHAIN: ${JSON.stringify(onchain)}`);
+      
       const boosts = [
         news?.results?.length ? 1.2 : 1,
         (rsi < 30 && macd > signal) ? 1.2 : 1,
